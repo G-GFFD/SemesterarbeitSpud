@@ -7,10 +7,11 @@
 #include<netinet/in.h>
 #include "injectcp.h"
 #include "spud.h"
+#include <errno.h>
+//#include "tubelist.h"
+#define SERVER "127.0.0.1"
 
-// need better way to manage opentubes, maybe a linked list?
-struct opentubes tubes[100];
-int counter = 0;
+uint8_t magic[4] = {11011000,00000000,0000000,11011000};
 
 struct spudheader* mallocspudheader()
 {
@@ -19,8 +20,16 @@ struct spudheader* mallocspudheader()
 
 	struct spudheader* hdr = malloc(sizeof(struct spudheader));
 	
-	hdr->magic = 0xd8000d8;
+	memcpy(hdr->magic,magic,32);
+
 	hdr->cmdflags = 0;
+	
+	//just to try to fix a crash caused by uninitialized values in mallocspudheader()
+	int i;
+	for(i=0; i<8; i++)
+	{
+		hdr->tubeid[i] = 0;
+	}
 
 	return hdr;
 }
@@ -30,21 +39,21 @@ int idgenerator(uint8_t* tubeid)
 	//This Function generates a random 64bit Tubeid and sets it into the spud header
 
 	srand(time(NULL));
-	int i = 0;
-	for(i<4; i++;)
+	int i;
+	uint8_t temp;
+
+	for(i=0;i<8; i++)
 	{
-		memcpy(tubeid+sizeof(uint8_t)*i,(uint8_t) rand(), sizeof(uint8_t));
+		temp = (uint8_t) rand();
+		memcpy(tubeid+sizeof(uint8_t)*i,&temp, sizeof(uint8_t));
 	}
 	
 }
 
-int opennewtube(struct sockaddr_in* receiver)
+int opennewtube(struct sockaddr_in* receiver, struct tcptuple* tcp)
 {
 
 	//This Function opens a new Tube to a Receiver, adds it to the local list and sends the open spud packet
-
-	if(counter < 100)
-	{
 
 		//Open new Tube
 		struct spudheader* newspudheader = mallocspudheader();
@@ -55,26 +64,49 @@ int opennewtube(struct sockaddr_in* receiver)
 		struct spudpacket* newspud = malloc(sizeof(struct spudpacket));
 		newspud->hdr = newspudheader;
 		newspud->datalenght = 0;
+		newspud->data = NULL;
 
-		//Save it in the local list of open Tubes
-		memcpy(tubes[counter].tubeid,newspudheader->tubeid, 4*sizeof(uint8_t));
-		tubes[counter].receiver = receiver;
-		tubes[counter].status = 1;
-		counter++;
-		
-		sendspud(receiver,newspud);	
-	}
+		//Create Status in List of Open Tubes
+		struct listelement *newentry = malloc(sizeof(struct listelement));
+		memcpy(newentry->tubeid,newspudheader->tubeid,8*sizeof(uint8_t));
+
+		//copy tcptuple to store in list, as original tuple will be free in sender.c (due to current implementation)
+		struct tcptuple* tubetcp = malloc(sizeof(struct tcptuple));
+		memcpy(tubetcp,tcp,sizeof(struct tcptuple));
+		newentry->tcp = tubetcp;
+		newentry->receiver = receiver;
+		newentry->status = 1;
+		addtube(newentry);
+
+		struct sockaddr_in localsource;
+		int fd;
+		memset(&localsource,0, sizeof(struct sockaddr_in));
+		inet_aton(SERVER, &receiver->sin_addr);
+		receiver->sin_port = htons(3334);
+		localsource.sin_port = htons(tubetcp->srcport-1); // fragen ob das schlau ist . . .
+
+		if ( (fd=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
+		{
+			printf("Failed to create socket!");
+		}
+		bind(fd, (struct sockaddr*) &localsource, sizeof (struct sockaddr_in));
+		if(connect(fd, (struct sockaddr*) receiver, sizeof (struct sockaddr_in)) == -1)
+		{
+			printf("ERROR WHILE CONNECT");
+		}
+		newentry->fd=fd;
+		sendspud(fd,newspud);	
 	
 }
 
-struct spudpacket* createspud(uint8_t tubeid, struct iphdr *iph, struct tcphdr *tcph, void* tcpdata)
+struct spudpacket* createspud(uint8_t* tubeid, struct iphdr *iph, struct tcphdr *tcph, void* tcpdata)
 {
 	//This Function creates and returns a spudpacket out of a tubeid, iphdr, tcphdr and tcpdata
 
 	struct spudpacket* spud = malloc(sizeof(spudpacket));
 	struct spudheader* header = mallocspudheader();
 	
-	*header->tubeid = tubeid;
+	memcpy(header->tubeid, tubeid, 8*sizeof(uint8_t));
 	header->cmdflags = header->cmdflags & 0b00000000;
 
 	spud->hdr = header;
@@ -96,44 +128,26 @@ struct spudpacket* createspud(uint8_t tubeid, struct iphdr *iph, struct tcphdr *
 		memcpy(spud->data+sizeof(struct iphdr), tcph, sizeof(struct tcphdr));
 
 		//finally memcpy tcpdata
-		memcpy(tcpdata,spud->data+sizeof(struct iphdr)+sizeof(struct tcphdr), tcpdatalenght);
+		memcpy(spud->data+sizeof(struct iphdr)+sizeof(struct tcphdr), tcpdata, tcpdatalenght);
 	}
 
 	else
 	{
 		printf("Fatal Error, TCP Datalenght too large: %i",spud->datalenght);
 		//For now just returning an empty spud . . .
+		//besser handeln, crasht manchmal weil spud->data kein pointer enthält bei free() . . .
 	}
 
 	return spud;
 	
 }
 
-struct sockaddr_in* getreceiverfromtubeid(uint8_t *tubeid)
-{
-	//This Function returns the receiver connected to a Tube ID in the local list of Open Tubes
-	
 
-	// struct sockaddr_in other aus globaler tubeliste holen
-	int i;	
-	for(i=0; i< 100; i++)
-	{
-		if(tubes[i].tubeid == tubeid)
-		{
-			return tubes[i].receiver;
-		}
-		// wo check auf status der tube?!
-	}
-
-	struct sockaddr_in fake;
-	return &fake;
-}
-
-int sendspud(struct sockaddr_in* other, struct spudpacket* spud)
+int sendspud(int fd, struct spudpacket* spud)
 {
 	//This Function sends the SPUD Packet to the receiver (here called other)
 
-	int s; // UDP Socket Descriptor
+	//int s; // UDP Socket Descriptor
 
 	//find out size of spudpacket & tcpdata . . .
 	int size = sizeof(struct spudheader) + spud->datalenght;
@@ -150,53 +164,70 @@ int sendspud(struct sockaddr_in* other, struct spudpacket* spud)
 		memcpy(buf+sizeof(struct spudheader), spud->data, spud->datalenght);
 		free(spud->data);
 	}
+
+	//struct sockaddr_in me;
+	//memset(&&me, 9, sizeof(struct sockaddr_in));
+	//me.sin_family = AF_INET;
+
+	//me.sin_port=htons(PORT); // sourceport, for each send queue, diffrent then receiver
 	
 	//das ganze via udp senden
-	s=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	sendto(s, buf, size, 0, &other, sizeof(other));
-	printf("SPUD SENT VIA UDP\n");
-	close(s);
-			
+	//s=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	//0printf("Socketfile descriptor is %i, -1 would indicate error", s);
+	//leep(1);
+	int temp = send(fd, buf, size, 0);
+	//printf("SPUD SENT VIA UDP TO %s on port %i \n",inet_ntoa(other->sin_addr),ntohs(other->sin_port));
+	//printf("Sento returned %i, that's the number of sent characters\n\n", temp);
+	//printf("sendto Error %s",strerror(errno));
+	//close(s);
+
+	//Socket schliessen bei closetube();
+	printf("Spud magic number of sent packet  . . . 0x%08x\n", ((struct spudheader*)buf)->magic);
+	printf("magic numberof a spudmalloc . . . 0x%08x\n", (mallocspudheader()->magic));
 	free(buf);
-		
 	free(spud->hdr);
 	free(spud);
 
 	return 1;
 	
 }
+// nicht mehr benötigt, da es jetzt findtcptouple gibt
 
-//todo
-uint8_t gettubeid(struct sockaddr_in* receiver)
+//todo -> falscher datentyp! 8*uint8_t für die 64bit nummber, also besser pointer?
+/*uint8_t gettubeid(struct sockaddr_in* receiver)
 {
 	//This Function searches the local list with the given receiver and if found returns the according tubeid
 	
 	//globales array durchsuchen . . .
-	int i = 0;
+	int i;
 	for (i=0; i < 100; i++)
 	{
 		//daddr und ports auch vergleichen. reicht das?
-		if(0/*receiver->sin_addr.s_addr == tubes[i].receiver->sin_addr.s_addr*/)
-		{
-			return tubes[i].tubeid;
-		}
+		//if(0receiver->sin_addr.s_addr == tubes[i].receiver->sin_addr.s_addr)
+		//{
+		//	return tubes[i].tubeid;
+		//}
 	}
 
 	return -1;
-}
+}*/
 int handlereceivedpacket(struct spudpacket* spud, struct sockaddr_in* receiver)
 {
 	//This Function handles received spud packets according to its cmdflags
-
-	if(spud->hdr->magic == 0xd8000d8)
+	printf("Wrong Magic Number is %i", spud->hdr->magic);
+	if(memcmp(magic,spud->hdr->magic)==0)
 	{
 		// ok valid spud packet
+		printf("received Valid SPUD");
 
 		if(spud->hdr->cmdflags & 0b01000000 == 1)
 		{
 			//received spud wants to open a new tube
 			printf("Received SPUD who wants to open a new tube\n");
-			acknowledgenewtube(spud, receiver);
+			//create socket for this receiver, bind
+			int fd;
+			fd=
+			acknowledgenewtube(spud, fd);
 		}
 
 		else if(spud->hdr->cmdflags & 0b10000000 == 1)
@@ -204,6 +235,18 @@ int handlereceivedpacket(struct spudpacket* spud, struct sockaddr_in* receiver)
 			//received spud wants to close a tube
 			printf("Received SPUD who wants to close a tube\n");
 			closetube(spud,receiver);
+		}
+
+		else if(spud->hdr->cmdflags & 0b11000000 == 1)
+		{
+			//tube status auf 2, "running" updaten
+			struct listelement* temp;
+			temp = searchlist(spud->hdr->tubeid);
+			if(temp != NULL)
+			{
+				temp->status = 2;
+			}
+
 		}
 		
 		else if(spud->hdr->cmdflags & 0b00000000 == 1)
@@ -221,6 +264,7 @@ int handlereceivedpacket(struct spudpacket* spud, struct sockaddr_in* receiver)
 			memcpy(tcph,spud+sizeof(struct spudheader)+sizeof(struct iphdr),sizeof(struct tcphdr));
 
 			//extract tcpdata . . .
+			//spud.datalenght hätte gesamtlänge des spudpackets
 
 			int tcpdatalenght = (int)(iph->tot_len)-((int)(tcph->doff)+((int)iph->ihl))*4;
 			void *tcpdata = malloc(tcpdatalenght);
@@ -240,12 +284,12 @@ int handlereceivedpacket(struct spudpacket* spud, struct sockaddr_in* receiver)
 
 		free(spud);
 		free(receiver);
-		return 0;
+		return 0; 
 	}
 }
 
 
-int acknowledgenewtube(struct spudpacket* spud, struct sockaddr_in* receiver)
+int acknowledgenewtube(struct spudpacket* spud, int fd)
 {
 	//This Function generates a SPUD Packet to acknowledge the request to open a tube
 
@@ -253,12 +297,16 @@ int acknowledgenewtube(struct spudpacket* spud, struct sockaddr_in* receiver)
 	spud->datalenght = 0;
 
 	//Add it to the local list	
-	*tubes[counter].tubeid = spud->hdr->tubeid;
-	tubes[counter].status = 2;
-	tubes[counter].receiver = receiver;
-	counter++;
+	struct listelement *newentry = malloc(sizeof(struct listelement));
+	memcpy(newentry->tubeid,spud->hdr->tubeid,8*sizeof(uint8_t));
 	
-	sendspud(receiver,spud);
+	//newentry->tcp = tcp; TCP Tuple problem noch lösen!!!
+	//newentry->receiver = receiver;
+
+	newentry->status = 2;
+
+	
+	sendspud(fd,spud);
 
 	return 1;
 }
@@ -291,14 +339,11 @@ int closetube(uint8_t *tubeid) //typ argument . . .
 
 int closetube(struct spudpacket* spud, struct sockaddr_in* receiver) //typ argument . . .
 {
-	//This function closes an existing Tube if this is requested by a received SPUD Packet
 
-	spud->hdr->cmdflags = spud->hdr->cmdflags & 0b10000000;
-	spud->datalenght = 0;
-	
-	sendspud(receiver, spud);
-
-	//to add: remove from list of open tubes
+	free(receiver);
+	//Remove from list of opentubes
+	//liste nach spud->hdr->tubeid durchsuchen, entfernen
+	free(spud);
 	return 0;
 }
 
