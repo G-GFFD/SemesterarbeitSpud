@@ -34,10 +34,10 @@ int sendspud(int fd, struct spudpacket* spud);
 int handlereceivedpacket(struct spudpacket* spud, struct sockaddr_in* receiver);
 
 //This Function generates a SPUD Packet to acknowledge the request to open a tube
-int acknowledgenewtube(struct spudpacket* spud, int fd);
+int acknowledgenewtube(struct spudpacket* spud, struct sockaddr_in* receiver);
 
 //Called after a packet with close cmd is received, removes tube from list of opentubes
-int closetube(struct spudpacket* spud, struct sockaddr_in* receiver);
+int closetube(uint8_t tubeid);
 
 //This Function searches the local list with the given receiver and if found returns the according tubeid
 //nicht mehr benötigt

@@ -30,11 +30,8 @@ int main(void)
 
 	printf("Ready to receive UDP Packets (SPUD) on Port %i\n", ntohs(myself.sin_port));
 	
-	printf("Size of Struct Spudheader: %i", sizeof(struct spudheader));
- 	
 	while(1)
 	{
-		printf("while\n");
 		void *buf = malloc(BUFLEN); //für jedes Packet neuer buffer anlegen
 		struct sockaddr_in* spudsource = malloc(sizeof(struct sockaddr_in)); //auch jeder receiver	
 		int size;
@@ -42,15 +39,7 @@ int main(void)
 		size = recvfrom(s, buf, BUFLEN, 0 ,spudsource, &slen);
 		if(size != -1)
 	        {
-			/* ev. nötig zu testzwecken, aber eigetnlich einfach an source vom receiver zurück
-			memset((char *) spudsource, 0, sizeof(struct sockaddr_in));
-			spudsource->port = htons(PORT-1);     
-			if (inet_aton(SERVER , &(spudsource->sin_addr)) == 0) 
-			{
-        			printf("inet_aton() failed\n");
-    			}*/
-			printf("Received packet of Size %i, extracting SPUD  . . . \n", size);
-	
+			// Received UDP, extracting SPUD
 			struct spudpacket* spud = malloc(sizeof(struct spudpacket));
 			struct spudheader* hdr = malloc(sizeof(struct spudheader));
 
@@ -59,7 +48,7 @@ int main(void)
 			memcpy(hdr,buf,sizeof(struct spudheader));
 			
 			spud->datalenght = size-sizeof(struct spudheader);
-			if(spud->datalenght != 0)
+			if(spud->datalenght > 0)
 			{
 				spud->data = malloc(spud->datalenght);
 				memcpy(spud->data,buf+sizeof(struct spudheader),spud->datalenght);
@@ -69,14 +58,17 @@ int main(void)
 				spud->data = NULL;
 			}
 			
-			printf("spudmagic %i \n", *(spud->hdr));
-			//handlereceivedpacket(spud,spudsource);
+			//memset((char *) spudsource, 0, sizeof(struct sockaddr_in));
+			inet_aton(SERVER, &spudsource->sin_addr);
+			spudsource->sin_port = htons(3332);
+	
+			handlereceivedpacket(spud,spudsource);
 			
        		}
 		
 		else
 		{
-			printf("-1");
+			printf("Problem while receiving UDP Packet . . . continue");
 			free(buf);
 			free(spudsource);
 		}
