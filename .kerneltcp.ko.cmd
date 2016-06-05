@@ -1,1 +1,0 @@
-cmd_/home/user/tcptospud/kerneltcp.ko := ld -r -m elf_x86_64 -T ./scripts/module-common.lds --build-id  -o /home/user/tcptospud/kerneltcp.ko /home/user/tcptospud/kerneltcp.o /home/user/tcptospud/kerneltcp.mod.o
