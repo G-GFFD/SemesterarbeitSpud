@@ -68,29 +68,24 @@ struct listelement* searchlist(uint8_t* tubeid)
 		}
 	}
 	
-	else
-	{
-		printf("Funktion searchlist was called, but the list is empty . . .\n");
-	}
 		return NULL; // Aussen überprüfen, falls 0 zurück dann wurde nicht gefunden
 }
 
 
 uint8_t* findtcptuple(struct tcptuple* tcp)
 {
-	struct listelement* temp = current; // current points always to the last element
-	int i;
-
-	if(temp != NULL)
+	if(current != NULL)
 	{
-		while(temp->previous != NULL)
+		struct listelement* temp = current; // current points always to the last element
+
+		do
 		{
 			if(comparetcptuple(temp->tcp, tcp))
 			{
 				return temp->tubeid;
 			}
 			temp = temp->previous;
-		}
+		}while(temp != NULL);
 	}
 	//Not Found:
 	return NULL;
@@ -99,7 +94,13 @@ uint8_t* findtcptuple(struct tcptuple* tcp)
 
 int comparetcptuple(struct tcptuple* a, struct tcptuple* b)
 {
-	if(a->srcport == b->srcport && a->destport==b->destport && strcmp(&a->srcip,&b->srcip)==0 && strcmp(&a->destip,&b->destip)==0) return 1;
+	if(a->srcip == NULL || b->srcip == NULL || a->destip == NULL || b->destip == NULL)
+	{
+		//debug . ..
+		printf("Error, one of the ip pointers in the tcptouple is NULL\n");
+	}
+
+	if(a->srcport == b->srcport && a->destport==b->destport && strcmp(a->srcip,b->srcip)==0 && strcmp(a->destip,b->destip)==0) return 1;
 
 	return 0;
 }

@@ -8,7 +8,7 @@
 #include "spud.h"
  
 #define SERVER "127.0.0.1"
-#define BUFLEN 15000 //Wie lange für UDP Packet? Todo . . . 
+#define BUFLEN 16000 //Wie lange für UDP Packet? Todo . . . 
 #define PORT 3333
   
 int main(void)
@@ -30,11 +30,16 @@ int main(void)
 
 	printf("Ready to receive UDP Packets (SPUD) on Port %i\n", ntohs(myself.sin_port));
 	
+	int size;
+	void *buf;
+	struct sockaddr_in* spudsource;
+
 	while(1)
 	{
-		void *buf = malloc(BUFLEN); //für jedes Packet neuer buffer anlegen
-		struct sockaddr_in* spudsource = malloc(sizeof(struct sockaddr_in)); //auch jeder receiver	
-		int size;
+		printf("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - \n");
+		buf = malloc(BUFLEN); //für jedes Packet neuer buffer anlegen
+		spudsource = malloc(sizeof(struct sockaddr_in)); //auch jeder receiver	
+		size = 0;
 
 		size = recvfrom(s, buf, BUFLEN, 0 ,spudsource, &slen);
 		if(size != -1)
@@ -42,7 +47,8 @@ int main(void)
 			// Received UDP, extracting SPUD
 			struct spudpacket* spud = malloc(sizeof(struct spudpacket));
 			struct spudheader* hdr = malloc(sizeof(struct spudheader));
-
+			
+			printf("totalsize of received spud is: %i",size);
 			spud->hdr = hdr;
 
 			memcpy(hdr,buf,sizeof(struct spudheader));
@@ -73,6 +79,7 @@ int main(void)
 			free(spudsource);
 		}
        
+		printf("\n");
 	
 	}
  

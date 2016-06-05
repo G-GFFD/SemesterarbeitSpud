@@ -39,13 +39,5 @@ int acknowledgenewtube(struct spudpacket* spud, struct sockaddr_in* receiver);
 //Called after a packet with close cmd is received, removes tube from list of opentubes
 int closetube(uint8_t tubeid);
 
-//This Function searches the local list with the given receiver and if found returns the according tubeid
-//nicht mehr benötigt
-//uint8_t gettubeid(struct sockaddr_in* receiver);
-
-//Funktion wird nie benutzt . . .
-//This Function returns the receiver connected to a Tube ID in the local list of Open Tubes
-//struct sockaddr_in* getreceiver(uint8_t* tubeid);
-
 //This Function allocates space for the SPUD Header and initializes it with standart Values
 struct spudheader* mallocspudheader();

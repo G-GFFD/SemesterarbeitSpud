@@ -54,10 +54,13 @@ int opennewtube(struct sockaddr_in* receiver, struct tcptuple* tcp)
 	//This Function opens a new Tube to a Receiver, adds it to the local list and sends the open spud packet
 
 		//Open new Tube
-		printf("New TCP Stream detected, opening new SPUD Tube \n");
 		struct spudheader* newspudheader = mallocspudheader();
 	
+		//just to make sure new tube id is not already taken
+		do{
 		idgenerator(newspudheader->tubeid);
+		}while(searchlist(newspudheader->tubeid) != NULL);
+		//wihtout do-while I got multiple tubes with the same id if they were created immediatley after another, strange . . ..
 
 		newspudheader->cmdflags = 0;
 		newspudheader->cmdflags |= 1<<6; //set to 0b1000000;
@@ -74,6 +77,15 @@ int opennewtube(struct sockaddr_in* receiver, struct tcptuple* tcp)
 		//copy tcptuple to store in list, as original tuple will be free in sender.c (due to current implementation)
 		struct tcptuple* tubetcp = malloc(sizeof(struct tcptuple));
 		memcpy(tubetcp,tcp,sizeof(struct tcptuple));
+
+		//Same problem with the source/dest ip pointer as they'll be freed
+		//Ip's nur pointer im tcptouple -> auch noch kopieren
+		tubetcp->srcip = malloc(sizeof(char)*16);
+		tubetcp->destip = malloc(sizeof(char)*16);
+
+		strncpy(tubetcp->srcip, tcp->srcip, 16);
+		strncpy(tubetcp->destip, tcp->destip, 16);
+
 		newentry->tcp = tubetcp;
 		newentry->receiver = receiver;
 		newentry->status = 1;
@@ -189,27 +201,27 @@ int handlereceivedpacket(struct spudpacket* spud, struct sockaddr_in* receiver)
 		// ok valid spud packet
 		
 		//check if bits in cmdflags are set 01xxxx
-		if(/*((6>>spud->hdr->cmdflags) &1) && !((7>>spud->hdr->cmdflags) &1)*/spud->hdr->cmdflags == 0x40)
+		if((((spud->hdr->cmdflags & (1 << 6)) >> 6) &1) && (!((spud->hdr->cmdflags & (1 << 7)) >> 7) &1))
 		{
 			//received spud wants to open a new tube
-			printf("Received SPUD who wants to open a new tube\n");
+			printf("Received SPUD that wants to open a new tube\n");
 			//create socket for this receiver, bind
 			
 			acknowledgenewtube(spud, receiver);
 		}
 		
 		//check if bits in cmdflags are set 10xxxxx
-		else if(/*((7>>spud->hdr->cmdflags) &1) && !((6>>spud->hdr->cmdflags)&1)*/spud->hdr->cmdflags == 128)
+		else if((((spud->hdr->cmdflags & (1 << 7)) >> 7) &1) && (!((spud->hdr->cmdflags & (1 << 6)) >> 6) &1))
 		{
 			//received spud wants to close a tube
-			printf("Received SPUD who wants to close a tube\n");
+			printf("Received SPUD that wants to close a tube\n");
 			closetube(spud->hdr->tubeid);
 		}
 
 		//check if bits in cmdflags are set 11xxxxx
-		else if(/*((6>>spud->hdr->cmdflags) &1) && ((7>>spud->hdr->cmdflags) &1)*/spud->hdr->cmdflags == 192)
+		else if((((spud->hdr->cmdflags & (1 << 6)) >> 6) &1) && (((spud->hdr->cmdflags & (1 << 7)) >> 7) &1))
 		{
-			printf("received SPUD that's acknowledges a tube\n");
+			printf("Received SPUD that acknowledges a tube\n");
 			//tube status auf 2, "running" updaten
 			struct listelement* temp;
 			temp = searchlist(spud->hdr->tubeid);
@@ -221,30 +233,42 @@ int handlereceivedpacket(struct spudpacket* spud, struct sockaddr_in* receiver)
 		}
 		
 		//check if bits in cmdflags are set 00xxxx
-		else if(/*(!(6>>spud->hdr->cmdflags) &1) && !((7>>spud->hdr->cmdflags) &1)*/spud->hdr->cmdflags ==0)
+		else if((!((spud->hdr->cmdflags & (1 << 6)) >> 6) &1) && (!((spud->hdr->cmdflags & (1 << 7)) >> 7) &1))
 		{
 			//received Spud containing Data
-			printf("dataspud received");
 
-			printf("Received SPUD Data  Packet. Extracting TCP . . .\n");
+			printf("Received SPUD Data packet. Extracting TCP . . .\n");
 	
 			//fetch ip header from the whole received spud
 			struct iphdr *iph = malloc(sizeof(struct iphdr));
-			memcpy(iph,spud+sizeof(struct spudheader),sizeof(struct iphdr));
+			memcpy(iph,spud->data,sizeof(struct iphdr));
 
 			//fetch tcp header from whole received spud
 			struct tcphdr *tcph = malloc(sizeof(struct tcphdr));
-			memcpy(tcph,spud+sizeof(struct spudheader)+sizeof(struct iphdr),sizeof(struct tcphdr));
+			memcpy(tcph,spud->data+sizeof(struct iphdr),sizeof(struct tcphdr));
 
 			//extract tcpdata . . .
 			//spud.datalenght hätte gesamtlänge des spudpackets
 
 			int tcpdatalenght = (int)(iph->tot_len)-((int)(tcph->doff)+((int)iph->ihl))*4;
-			void *tcpdata = malloc(tcpdatalenght);
-			memcpy(tcpdata,spud+sizeof(struct spudheader)+sizeof(struct iphdr)+sizeof(struct tcphdr), tcpdatalenght);
+			//int lenght2 = spud->datalenght - sizeof(struct iphdr) - sizeof(struct tcphdr);
 
-			injecttcp(iph, tcph, tcpdata);
-			printf("Iphdr, tcphdr, tcpdata extracted from spud, injection function called. . .\n");
+			printf("calculated tcpdatalenght out of headerinfos is: %i\n",tcpdatalenght);
+
+			if(tcpdatalenght > 0)
+			{			
+				void *tcpdata = malloc(tcpdatalenght);
+				memcpy(tcpdata,spud->data+sizeof(struct iphdr)+sizeof(struct tcphdr), tcpdatalenght);
+	
+				injecttcp(iph, tcph, tcpdata);
+				printf("Iphdr, tcphdr, tcpdata extracted from spud, injection function called. . .\n");
+			}
+
+			else
+			{
+				printf("tcpdatalenght of received packet is negative . . .\n");
+
+			}			
 			free(spud);
 			free(receiver);
 		}

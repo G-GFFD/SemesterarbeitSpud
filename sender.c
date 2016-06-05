@@ -87,9 +87,12 @@ int main(int argc, char* argv[])
 
 	int tcpdatalenght;
 	int size;
+	uint8_t* temptube;
+	struct tcptuple* tcpstream;
 
 	while(1)
 	{
+		printf("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - \n");
 		//1. Teil SPUDS empfangen und hier injecten
 
 		struct sockaddr_in* spudsource = malloc(sizeof(struct sockaddr_in));
@@ -124,6 +127,8 @@ int main(int argc, char* argv[])
 						
 			//setzen wir alles mal wieder auf null für die nächste runde
 			memset(buf,0,MAX_PAYLOAD);
+
+			printf("\n");
 			
 		}
 
@@ -132,6 +137,7 @@ int main(int argc, char* argv[])
 			//No UDP Packet ready to be received
 			free(spudsource);
 		}
+
 
 		//2. Teil TCP aus Kernelspace über SPUD wegsenden
 	
@@ -165,7 +171,7 @@ int main(int argc, char* argv[])
 		receiver->sin_port= htons(PORT);
 
 		//tcpverbindung des packets identifizieren
-		struct tcptuple* tcpstream = malloc(sizeof(struct tcptuple));
+		tcpstream = malloc(sizeof(struct tcptuple));
 
 		tcpstream->srcip = malloc(sizeof(char)*16);// size for ipv4 adress as char-string
 		tcpstream->destip = malloc(sizeof(char)*16); //16, dami tplatz für 0 byte für termination?
@@ -176,22 +182,54 @@ int main(int argc, char* argv[])
 		tcpstream->srcport = ntohs(tcph->source);
 		tcpstream->destport = ntohs(tcph->dest);
 
+		temptube = findtcptuple(tcpstream);
+
 		if(tcph->syn == 1)
 		{
-			//Neuer TCP Stream entdeckt.  . . öffne neue SPUD Tube
-			opennewtube(receiver, tcpstream); 
+
+			if(temptube == NULL)
+			{
+				//Neuer TCP Stream entdeckt für den noch keine tube existiert
+
+				//Debug print new TCP STream
+				printf("New TCP Stream detected, opening Tube for: \n \n");
+				printf("Src IP: %s Src Port %i \n",tcpstream->srcip,tcpstream->srcport);	
+				printf("Dest IP: %s Dest Port %i \n", tcpstream->destip, tcpstream->destport);		
+				opennewtube(receiver, tcpstream); //opennewtube könnte eigentlich tubeid zurückgeben			
+				temptube = findtcptuple(tcpstream);
+			
+				//printing tubeid
+				if(temptube != NULL)
+				{
+					printf("Tubeid: ");
+					int i;
+					for(i=0; i<8; i++)
+					{
+						printf("%i ",temptube[i]);
+					}
+					printf("\n \n");
+				}
+			
+				else
+				{
+					printf("Temptube ist NULL obwohl opentubes eigentlich eine angelegt haben sollte  . . .\n");
+				}
+			}
+
+			else
+			{
+				printf("Existing Tube found\n");
+			}	
 		}
 		
 		// Prüfen ob für diese TCP Sequenz / IP bereits eine Tube offen ist, ansonsten error
 
-		uint8_t* temptube = findtcptuple(tcpstream);
-
 		if(temptube != NULL)
 		{
-			printf("Existing Tube found, sending spud . . .\n");
 			struct listelement* this = searchlist(temptube);
 			if(this != NULL)
 			{
+				printf("Sending SPUD\n");
 				sendspud(this->fd,createspud(temptube,iph, tcph,data));
 			}		
 		}

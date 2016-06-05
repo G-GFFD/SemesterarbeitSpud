@@ -16,4 +16,4 @@ int CreateRawSocket(int protocol_to_sniff);
 int BindRawSocketToInterface(char *device, int rawsock, int protocol);
 int SendRawPacket(int rawsock, unsigned char *pkt, int pkt_len);
 struct ethhdr* CreateEthernetHeader(char *src_mac, char *dst_mac, int protocol);
-//int CreatePseudoHeader(struct tcphdr *tcph, struct iphdr *iph, unsigned char *data);
+//int CreatePseudoHeader(struct tcphdr *tcph, struct iphdr *iph);

@@ -31,10 +31,10 @@ int injecttcp(struct iphdr* iph, struct tcphdr* tcph, void* tcpdata)
 
 	ethernet_header = CreateEthernetHeader(SRC_ETHER_ADDR, DST_ETHER_ADDR, ETHERTYPE_IP);
 
-	CreatePseudoHeader(tcph, iph, tcpdata);
+	CreatePseudoHeader(tcph, iph);
 
 	//Packet length
-	pkt_len = sizeof(struct ethhdr) + ntohs(iph->tot_len);
+	pkt_len = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct tcphdr) + tcpdatalength;//ntohs(iph->tot_len);
 	packet = (unsigned char *)malloc(pkt_len);
 
 	//Copy Ethernet Header
@@ -44,14 +44,14 @@ int injecttcp(struct iphdr* iph, struct tcphdr* tcph, void* tcpdata)
 	memcpy((packet + sizeof(struct ethhdr)), iph, iph->ihl*4);
 
 	//Copy TCPHDR
-	memcpy((packet + sizeof(struct ethhdr) + iph->ihl*4),tcph, tcph->doff*4);
+	memcpy((packet + sizeof(struct ethhdr) + sizeof(struct iphdr)),tcph, sizeof(struct tcphdr));
 	
 	//Finally copy Data
-	memcpy((packet + sizeof(struct ethhdr) + iph->ihl*4 + tcph->doff*4), tcpdata, tcpdatalength);
+	memcpy((packet + sizeof(struct ethhdr) + sizeof(struct iphdr) +sizeof(struct tcphdr)), tcpdata, tcpdatalength);
 	
 	if(!SendRawPacket(raw, packet, pkt_len))
 	{
-		printf("Error sending packet\n");
+		printf("Error sending packet due to error %s \n", strerror(errno));
 	}
 	else
 		printf("Packet sent successfully\n");
@@ -75,7 +75,7 @@ int CreateRawSocket(int protocol_to_sniff)
 
 	if((rawsock = socket(PF_PACKET, SOCK_RAW, htons(protocol_to_sniff)))== -1)
 	{
-		printf("Error creating raw socket!");
+		printf("Error creating raw socket! Errno: %s", strerror(errno));
 		exit(-1);
 	}
 
@@ -98,12 +98,10 @@ int BindRawSocketToInterface(char *device, int rawsock, int protocol)
 		exit(-1);
 	}
 
-	/* Bind our raw socket to this interface */
 
 	sll.sll_family = AF_PACKET;
 	sll.sll_ifindex = ifr.ifr_ifindex;
-	sll.sll_protocol = htons(protocol); 
-
+	sll.sll_protocol = htons(protocol);
 
 	if((bind(rawsock, (struct sockaddr *)&sll, sizeof(sll)))== -1)
 	{
@@ -145,7 +143,7 @@ struct ethhdr* CreateEthernetHeader(char *src_mac, char *dst_mac, int protocol)
 	return (ethernet_header);
 }
 
-int CreatePseudoHeader(struct tcphdr *tcph, struct iphdr *iph, unsigned char *data)
+int CreatePseudoHeader(struct tcphdr *tcph, struct iphdr *iph)
 {
 	/* Find the size of the TCP Header + Data */
 	int segment_len = ntohs(iph->tot_len) - iph->ihl*4; 
@@ -165,12 +163,16 @@ int CreatePseudoHeader(struct tcphdr *tcph, struct iphdr *iph, unsigned char *da
 
 	
 	//Copy TCP
-	memcpy((hdr + sizeof(PseudoHeader)), (void *)tcph, tcph->doff*4);
+	memcpy((hdr + sizeof(PseudoHeader)), tcph, /*tcph->doff*4*/sizeof(struct tcphdr));
 
+	/*
 	//Copy Data
-	int tcpdatalenth = (int)(iph->tot_len)-((int)(tcph->doff)+((int)iph->ihl))*4;
+	int tcpdatalength = (int)(iph->tot_len)-((int)(tcph->doff)+((int)iph->ihl))*4;
 
-	memcpy((hdr + sizeof(PseudoHeader) + tcph->doff*4), data, tcpdatalenth);
+	printf("Allocated: %i, Size PseudoHeader %i, Size TCPHDR %i, tcpdatalenght %i",header_len,sizeof(PseudoHeader),sizeof(struct tcphdr),tcpdatalength);
+	fflush(stdout);
+	memcpy((hdr + sizeof(PseudoHeader) + sizeof(struct tcphdr)), data, tcpdatalength);
+	*/
 
 	free(hdr);
 
