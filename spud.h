@@ -37,7 +37,7 @@ int handlereceivedpacket(struct spudpacket* spud, struct sockaddr_in* receiver);
 int acknowledgenewtube(struct spudpacket* spud, struct sockaddr_in* receiver);
 
 //Called after a packet with close cmd is received, removes tube from list of opentubes
-int closetube(uint8_t tubeid);
+int closetube(uint8_t* tubeid);
 
 //This Function allocates space for the SPUD Header and initializes it with standart Values
 struct spudheader* mallocspudheader();

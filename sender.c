@@ -11,22 +11,52 @@
 #include <errno.h>
 #include <fcntl.h>
 #include "spud.h"
+#include <sys/ioctl.h>
+#include <net/if.h>
+#include "tcphandling.h"
+#include <sys/types.h>
+#include <unistd.h>
 
-
+#define SIZENLMSGBUFFER 102400
 #define NETLINK_USER 31
-#define MAX_PAYLOAD 102400
+#define MAX_PAYLOAD 1500
 #define SERVER "127.0.0.1"
 #define PORT 3333
-
-struct sockaddr_nl src_addr, dest_addr;
-struct nlmsghdr *nlh = NULL;
-struct iovec iov;
-int sock_fd;
-struct msghdr msg;
+#define HELLO "hello" //defines init message between this userspace programm and the kernel Module
 
 
-int main(int argc, char* argv[])
+int main()
 {
+
+	struct sockaddr_nl src_addr, dest_addr;
+	struct nlmsghdr *nlh = NULL;
+	struct iovec iov;
+	int sock_fd;
+	struct msghdr msg;
+
+	memset(&msg,0, sizeof(struct msghdr));
+
+	//Make sure Kernel Module is loaded:
+	
+	//load it in a binary buffer
+	/*int fdm = fopen("kerneltcp.ko",rb);
+	if(fdm < 0)
+	{
+		printf("problem opening file");
+		fflush(stdout);
+	}
+	fseek(fdm, 0, SEEK_END);
+	int len=ftell(fdm);
+	void* buff = malloc(len);
+	fseek(fdm, 0, SEEK_SET);
+	fread(buff,len,1,fdm);
+	fclose(fdm);
+
+	if(init_module(buff,len,"") < 0)
+	{
+		printf("Failed to load required Kernel Module\n");
+	}*/
+
 	// Part 1. Initiate connection with Kernel
 	sock_fd=socket(PF_NETLINK, SOCK_RAW, NETLINK_USER);
 	
@@ -47,13 +77,17 @@ int main(int argc, char* argv[])
 	dest_addr.nl_pid = 0;
 	dest_addr.nl_groups = 0;
 
-	nlh = (struct nlmsghdr *)malloc(NLMSG_SPACE(MAX_PAYLOAD));
-	memset(nlh, 0, NLMSG_SPACE(MAX_PAYLOAD));
-	nlh->nlmsg_len = NLMSG_SPACE(MAX_PAYLOAD);
+	//char* message = malloc(strlen(HELLO));
+
+	int length = SIZENLMSGBUFFER;
+	
+	nlh = (struct nlmsghdr *)malloc(NLMSG_SPACE(length));
+	memset(nlh, 0, NLMSG_SPACE(length));
+	nlh->nlmsg_len = NLMSG_SPACE(length);
 	nlh->nlmsg_pid = getpid();
 	nlh->nlmsg_flags = 0;
 
-	strcpy(NLMSG_DATA(nlh), "Hello"); // just that the Kernel knows the pid . . .
+	strcpy(NLMSG_DATA(nlh), HELLO); // just that the Kernel knows the pid . . .
 
 	iov.iov_base = (void *)nlh;
 	iov.iov_len = nlh->nlmsg_len;
@@ -70,7 +104,8 @@ int main(int argc, char* argv[])
 	
 	struct sockaddr_in myself;
 
-    	int s, i, slen=sizeof(struct sockaddr_in);
+    	int s; //i;
+	socklen_t slen=sizeof(struct sockaddr_in);
 	void *buf = malloc(MAX_PAYLOAD);
  
 	if ( (s=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
@@ -83,9 +118,8 @@ int main(int argc, char* argv[])
 	myself.sin_port = htons(PORT-1); // htons(argv[1]);
 
 	myself.sin_addr.s_addr = htonl(INADDR_ANY);
-	bind(s, &myself, sizeof(myself));
+	bind(s, (const struct sockaddr*) &myself, sizeof(myself));
 
-	int tcpdatalenght;
 	int size;
 	uint8_t* temptube;
 	struct tcptuple* tcpstream;
@@ -97,7 +131,7 @@ int main(int argc, char* argv[])
 
 		struct sockaddr_in* spudsource = malloc(sizeof(struct sockaddr_in));
 		
-		if(size = recvfrom(s, buf, MAX_PAYLOAD, MSG_DONTWAIT,spudsource, &slen) != -1)
+		if((size = recvfrom(s, buf, MAX_PAYLOAD, MSG_DONTWAIT,(struct sockaddr*) spudsource, &slen)) != -1)
 		{   	
 			// Extract SPUD from received UDP
 
@@ -141,115 +175,196 @@ int main(int argc, char* argv[])
 
 		//2. Teil TCP aus Kernelspace über SPUD wegsenden
 	
-		//Dieser Teil muss noch überarbeitet werden. 
+		// Extract IPHDR first, see if there are any options 
 
-		// Receive IPHDR First.. . 
-
-		recvmsg(sock_fd, &msg, 0);
-		struct iphdr *iph = malloc(sizeof(struct iphdr));
-		memcpy(iph,NLMSG_DATA(nlh), sizeof(struct iphdr));
+		// Set Flag to MSG_DONTWAIT . . .. aber dann läuft es viel zu schnell durch die schleife
 	
-		// TCP Header Next . . .
-		recvmsg(sock_fd, &msg, 0);
-		struct tcphdr *tcph = malloc(sizeof(struct tcphdr));
-		memcpy(tcph, NLMSG_DATA(nlh), sizeof(struct tcphdr));
-
-		// Last receive tcp_data:
-		recvmsg(sock_fd, &msg, 0);
-		
-		tcpdatalenght = (int)(iph->tot_len)-((int)(tcph->doff)+((int)iph->ihl))*4;
-		char *data = malloc(tcpdatalenght);
-		memcpy(data, NLMSG_DATA(nlh), tcpdatalenght);
-		
-		//setup struct soackaddr_in for external receiver of our spud packet
-		struct sockaddr_in* receiver = malloc(sizeof(struct sockaddr_in));
-		memset((char *) receiver, 0, sizeof (struct sockaddr_in));
-		
-		//send everything locally for now -> to be changed
-		receiver->sin_family = AF_INET;
-		inet_aton(SERVER, &receiver->sin_addr);
-		receiver->sin_port= htons(PORT);
-
-		//tcpverbindung des packets identifizieren
-		tcpstream = malloc(sizeof(struct tcptuple));
-
-		tcpstream->srcip = malloc(sizeof(char)*16);// size for ipv4 adress as char-string
-		tcpstream->destip = malloc(sizeof(char)*16); //16, dami tplatz für 0 byte für termination?
-		
-		strcpy(tcpstream->srcip,inet_ntoa(*(struct in_addr*)&iph->saddr));
-		strcpy(tcpstream->destip,inet_ntoa(*(struct in_addr*)&iph->daddr));
-
-		tcpstream->srcport = ntohs(tcph->source);
-		tcpstream->destport = ntohs(tcph->dest);
-
-		temptube = findtcptuple(tcpstream);
-
-		if(tcph->syn == 1)
+		if((size = recvmsg(sock_fd, &msg, 0)) != -1)
 		{
+			void *message = malloc(SIZENLMSGBUFFER);
+			memcpy(message,NLMSG_DATA(nlh),SIZENLMSGBUFFER);
 
-			if(temptube == NULL)
+			struct iphdr *iph = NULL;
+			struct tcphdr *tcph = NULL;
+			char *data = NULL;
+
+			iph = extractiph(message);
+			tcph = extracttcph(message,iph);
+			data = extracttcpdata(message,iph,tcph);
+			
+			if(iph == NULL || tcph == NULL)
 			{
-				//Neuer TCP Stream entdeckt für den noch keine tube existiert
+				//problem, was nun?
+				break;
+			}
+			
+			free(message);
+			//setup struct soackaddr_in for external receiver of our spud packet
+			struct sockaddr_in* receiver = malloc(sizeof(struct sockaddr_in));
+			memset((char *) receiver, 0, sizeof (struct sockaddr_in));
+		
+			//send everything locally for now -> to be changed
+			receiver->sin_family = AF_INET;
+			inet_aton(SERVER, &receiver->sin_addr);
+			receiver->sin_port= htons(PORT);
 
-				//Debug print new TCP STream
-				printf("New TCP Stream detected, opening Tube for: \n \n");
-				printf("Src IP: %s Src Port %i \n",tcpstream->srcip,tcpstream->srcport);	
-				printf("Dest IP: %s Dest Port %i \n", tcpstream->destip, tcpstream->destport);		
-				opennewtube(receiver, tcpstream); //opennewtube könnte eigentlich tubeid zurückgeben			
-				temptube = findtcptuple(tcpstream);
-			
-				//printing tubeid
-				if(temptube != NULL)
+			//tcpverbindung des packets identifizieren
+			tcpstream = malloc(sizeof(struct tcptuple));
+
+			tcpstream->srcip = malloc(sizeof(char)*16);// size for ipv4 adress as char-string
+			tcpstream->destip = malloc(sizeof(char)*16); //16, dami tplatz für 0 byte für termination?
+		
+			strcpy(tcpstream->srcip,inet_ntoa(*(struct in_addr*)&iph->saddr));
+			strcpy(tcpstream->destip,inet_ntoa(*(struct in_addr*)&iph->daddr));
+
+			tcpstream->srcport = ntohs(tcph->source);
+			tcpstream->destport = ntohs(tcph->dest);
+
+			temptube = findtcptuple(tcpstream);
+			if(tcph->syn == 1)
+			{
+				//check if TCP MSS Option is set
+				
+				//32bit binary to set tcp option mss to 1446 byte
+				uint8_t mssoption[4] = {00000010, 00000100, 00000101,10100110};					
+				
+				if((tcph->doff)*4 > sizeof(struct tcphdr))
 				{
-					printf("Tubeid: ");
-					int i;
-					for(i=0; i<8; i++)
+					//There are options
+					int numberofoptions = tcph->doff - sizeof(struct tcphdr)/4;
+					
+					//check if one of them sets mss
+					int i, istrue = 0;
+
+					for(i=0; i<numberofoptions; i++)
 					{
-						printf("%i ",temptube[i]);
+						if(memcmp(&mssoption,tcph+(tcph->doff)+i*4,1) == 0)
+						{
+							//MSS Option found
+							istrue = 1;
+							
+							//check if mss <= 1446, this is the maximum size of tcp options + data so that the injected ethernet packet at the receiver is max. 1500 bytes
+							
+							uint16_t currentmss = 0;
+							memcpy(&currentmss,(void *)tcph+(tcph->doff)+i*4+2,2);
+
+							if(currentmss <= (uint16_t) 1446)
+							{
+								//no problem then
+								printf("MSS small already enough :)\n");
+								break;
+							}
+							
+							else
+							{
+								//copy smaller MTU in option
+								memcpy((void *)tcph+(tcph->doff)+i*4+2,mssoption+2,2);
+								updatetcpchecksum(tcph,iph,data);
+								printf("current bigger mss changed to 1446 bytes\n");
+							}
+						}
 					}
-					printf("\n \n");
+
+					if(istrue != 1)
+					{
+						//some options are present, but not the MSS
+						
+						int newsize = (tcph->doff)*4;						
+
+						tcph = realloc(tcph,((tcph->doff)*4)+4);
+						//Add MSS option
+						memcpy(((void *)tcph)+((tcph->doff)*4),mssoption,4);
+
+				 		//adjust doff
+						tcph->doff = (tcph->doff)+1;//+= 1;
+						//update checksum
+						updatetcpchecksum(tcph, iph, data);
+						printf("added additional option to limit mss to 1446 bytes\n");
+					}
+					
 				}
-			
+
 				else
 				{
-					printf("Temptube ist NULL obwohl opentubes eigentlich eine angelegt haben sollte  . . .\n");
+					//No options present
+					tcph = realloc(tcph,sizeof(struct tcphdr)+4);
+					//Add MSS option
+					memcpy((void *)tcph+sizeof(struct tcphdr),mssoption,4);
+				 	//adjust doff
+					tcph->doff = tcph->doff+1;//+= 1;
+					//update checksum
+					updatetcpchecksum(tcph,iph,data);
+					printf("added option to limit mss to 1446 bytes\n");
+					
+				}
+
+				if(temptube == NULL)
+				{
+					//Neuer TCP Stream entdeckt für den noch keine tube existiert
+	
+					//Debug print new TCP STream
+					printf("New TCP Stream detected, opening Tube for: \n \n");
+					printf("Src IP: %s Src Port %i \n",tcpstream->srcip,tcpstream->srcport);	
+					printf("Dest IP: %s Dest Port %i \n", tcpstream->destip, tcpstream->destport);		
+					opennewtube(receiver, tcpstream); //opennewtube könnte eigentlich tubeid zurückgeben			
+					temptube = findtcptuple(tcpstream);
+			
+					//printing tubeid
+					if(temptube != NULL)
+					{
+						printf("Tubeid: ");
+						int i;
+						for(i=0; i<8; i++)
+						{
+							printf("%i ",temptube[i]);
+						}
+						printf("\n \n");
+					}
+			
+					else
+					{
+						printf("Temptube ist NULL obwohl opentubes eigentlich eine angelegt haben sollte  . . .\n");
+					}
+				}
+
+				else
+				{
+					printf("Syn Flag set, but Tube alreasy exists\n");
+				}	
+			}
+		
+			// Prüfen ob für diese TCP Sequenz / IP bereits eine Tube offen ist, ansonsten error
+
+			if(temptube != NULL)
+			{
+				struct listelement* this = searchlist(temptube);
+				if(this != NULL)
+				{
+					printf("Sending SPUD\n");
+					sendspud(this->fd,createspud(temptube,iph, tcph,data));
 				}
 			}
 
 			else
 			{
-				printf("Existing Tube found\n");
-			}	
-		}
-		
-		// Prüfen ob für diese TCP Sequenz / IP bereits eine Tube offen ist, ansonsten error
-
-		if(temptube != NULL)
-		{
-			struct listelement* this = searchlist(temptube);
-			if(this != NULL)
-			{
-				printf("Sending SPUD\n");
-				sendspud(this->fd,createspud(temptube,iph, tcph,data));
+				//No active tube for this packet found, drop.
+				printf("No active Tube for this TCP Stream found, dropping packet . . .\n");
 			}		
-		}
-
-		else
-		{
-			//No active tube for this packet found, drop.
-		}		
 	
-		free(tcpstream->srcip);
-		free(tcpstream->destip);
-		free(tcpstream);
-		free(tcph);
-		free(iph);
-		free(data);
-		free(receiver);
+			free(tcpstream->srcip);
+			free(tcpstream->destip);
+			free(tcpstream);
+			free(tcph);
+			free(iph);
+			free(data);
+			free(receiver);
+		}
 	}	
 
 	//Closing UDP Socket
 	close(s);
 	//Closing Socket to kernel
 	close(sock_fd);
+
+	return 1;
 }

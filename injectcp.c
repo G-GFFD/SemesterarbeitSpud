@@ -34,20 +34,20 @@ int injecttcp(struct iphdr* iph, struct tcphdr* tcph, void* tcpdata)
 	CreatePseudoHeader(tcph, iph);
 
 	//Packet length
-	pkt_len = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct tcphdr) + tcpdatalength;//ntohs(iph->tot_len);
+	pkt_len = 1500;// sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct tcphdr) + tcpdatalength;//ntohs(iph->tot_len);
 	packet = (unsigned char *)malloc(pkt_len);
 
 	//Copy Ethernet Header
 	memcpy(packet, ethernet_header, sizeof(struct ethhdr));
 
 	//Next Copy IPHDR
-	memcpy((packet + sizeof(struct ethhdr)), iph, iph->ihl*4);
+	memcpy((packet + sizeof(struct ethhdr)), iph, sizeof(struct iphdr));
 
 	//Copy TCPHDR
 	memcpy((packet + sizeof(struct ethhdr) + sizeof(struct iphdr)),tcph, sizeof(struct tcphdr));
 	
 	//Finally copy Data
-	memcpy((packet + sizeof(struct ethhdr) + sizeof(struct iphdr) +sizeof(struct tcphdr)), tcpdata, tcpdatalength);
+	memcpy((packet + sizeof(struct ethhdr) + sizeof(struct iphdr) +sizeof(struct tcphdr)), tcpdata, 1500-sizeof(struct ethhdr)-sizeof(struct iphdr)-sizeof(struct tcphdr));
 	
 	if(!SendRawPacket(raw, packet, pkt_len))
 	{

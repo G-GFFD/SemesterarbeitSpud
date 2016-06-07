@@ -8,6 +8,7 @@
 #include "injectcp.h"
 #include "spud.h"
 #include <errno.h>
+#include <time.h>
 
 #define SERVER "127.0.0.1"
 
@@ -129,8 +130,17 @@ struct spudpacket* createspud(uint8_t* tubeid, struct iphdr *iph, struct tcphdr 
 	spud->hdr = header;
 
 	int tcpdatalenght = (int)(iph->tot_len)-((int)(tcph->doff)+((int)iph->ihl))*4;
+
+	int iphdrlen = ((int)(iph->ihl)*4); // sizeof(struct iphdr) doesn't contain the options appended at the end
+	int tcphdrlen = ((int)(tcph->doff)*4);
 		
-	spud->datalenght = tcpdatalenght + sizeof(struct iphdr) + sizeof (struct tcphdr);
+	spud->datalenght = tcpdatalenght + iphdrlen + tcphdrlen;
+
+	//check . . .
+	if(iph->tot_len != spud->datalenght)
+	{
+		//This would indicate some data have gone missing.
+	}
 
 	//This if due to crashes because of ridiculusly high datalenght which caused a crash (happend rarely)
 	if(spud->datalenght < 20000)
@@ -138,13 +148,13 @@ struct spudpacket* createspud(uint8_t* tubeid, struct iphdr *iph, struct tcphdr 
 		spud->data = malloc(spud->datalenght);
 
 		//first memcpy iphdr
-		memcpy(spud->data, iph, sizeof(struct iphdr));
+		memcpy(spud->data, iph,iphdrlen);
 
 		//second memcpy tcphdr
-		memcpy(spud->data+sizeof(struct iphdr), tcph, sizeof(struct tcphdr));
+		memcpy(spud->data+iphdrlen, tcph, tcphdrlen);
 
 		//finally memcpy tcpdata
-		memcpy(spud->data+sizeof(struct iphdr)+sizeof(struct tcphdr), tcpdata, tcpdatalenght);
+		memcpy(spud->data+iphdrlen+tcphdrlen, tcpdata, tcpdatalenght);
 	}
 
 	else
@@ -235,40 +245,27 @@ int handlereceivedpacket(struct spudpacket* spud, struct sockaddr_in* receiver)
 		//check if bits in cmdflags are set 00xxxx
 		else if((!((spud->hdr->cmdflags & (1 << 6)) >> 6) &1) && (!((spud->hdr->cmdflags & (1 << 7)) >> 7) &1))
 		{
-			//received Spud containing Data
 
-			printf("Received SPUD Data packet. Extracting TCP . . .\n");
-	
-			//fetch ip header from the whole received spud
-			struct iphdr *iph = malloc(sizeof(struct iphdr));
-			memcpy(iph,spud->data,sizeof(struct iphdr));
+			struct iphdr *iph = NULL;
+			struct tcphdr *tcph = NULL;
+			char *data = NULL;
 
-			//fetch tcp header from whole received spud
-			struct tcphdr *tcph = malloc(sizeof(struct tcphdr));
-			memcpy(tcph,spud->data+sizeof(struct iphdr),sizeof(struct tcphdr));
+			iph = extractiph(spud->data);
+			tcph = extracttcph(spud->data,iph);
+			data = extracttcpdata(spud->data,iph,tcph);
 
-			//extract tcpdata . . .
-			//spud.datalenght hätte gesamtlänge des spudpackets
-
-			int tcpdatalenght = (int)(iph->tot_len)-((int)(tcph->doff)+((int)iph->ihl))*4;
-			//int lenght2 = spud->datalenght - sizeof(struct iphdr) - sizeof(struct tcphdr);
-
-			printf("calculated tcpdatalenght out of headerinfos is: %i\n",tcpdatalenght);
-
-			if(tcpdatalenght > 0)
-			{			
-				void *tcpdata = malloc(tcpdatalenght);
-				memcpy(tcpdata,spud->data+sizeof(struct iphdr)+sizeof(struct tcphdr), tcpdatalenght);
-	
-				injecttcp(iph, tcph, tcpdata);
+			if(iph != NULL && tcph != NULL)
+			{
+				injecttcp(iph, tcph, data);
 				printf("Iphdr, tcphdr, tcpdata extracted from spud, injection function called. . .\n");
 			}
 
 			else
 			{
-				printf("tcpdatalenght of received packet is negative . . .\n");
+				printf("Extraction unsuccessfull, can't inject tcp\n");
+			}
 
-			}			
+			free(spud->data);
 			free(spud);
 			free(receiver);
 		}
@@ -334,7 +331,7 @@ int acknowledgenewtube(struct spudpacket* spud, struct sockaddr_in* receiver)
 }
 
 
-int closetube(uint8_t tubeid) //typ argument . . .
+int closetube(uint8_t* tubeid) //typ argument . . .
 {
 	//This function handles the closure of a tube initiated by someone else.
 		
