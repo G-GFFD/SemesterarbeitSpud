@@ -27,41 +27,59 @@ int injecttcp(struct iphdr* iph, struct tcphdr* tcph, void* tcpdata)
 	
 	raw = CreateRawSocket(ETH_P_ALL);
 
-	BindRawSocketToInterface("eth0", raw, ETH_P_ALL);
+	BindRawSocketToInterface("lo", raw, ETH_P_ALL);
 
 	ethernet_header = CreateEthernetHeader(SRC_ETHER_ADDR, DST_ETHER_ADDR, ETHERTYPE_IP);
 
 	CreatePseudoHeader(tcph, iph);
 
 	//Packet length
-	pkt_len = 1500;// sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct tcphdr) + tcpdatalength;//ntohs(iph->tot_len);
-	packet = (unsigned char *)malloc(pkt_len);
+	pkt_len = ntohs(iph->tot_len);
 
-	//Copy Ethernet Header
-	memcpy(packet, ethernet_header, sizeof(struct ethhdr));
-
-	//Next Copy IPHDR
-	memcpy((packet + sizeof(struct ethhdr)), iph, sizeof(struct iphdr));
-
-	//Copy TCPHDR
-	memcpy((packet + sizeof(struct ethhdr) + sizeof(struct iphdr)),tcph, sizeof(struct tcphdr));
-	
-	//Finally copy Data
-	memcpy((packet + sizeof(struct ethhdr) + sizeof(struct iphdr) +sizeof(struct tcphdr)), tcpdata, 1500-sizeof(struct ethhdr)-sizeof(struct iphdr)-sizeof(struct tcphdr));
-	
-	if(!SendRawPacket(raw, packet, pkt_len))
+	/*if(pkt_len > 1500)
 	{
-		printf("Error sending packet due to error %s \n", strerror(errno));
-	}
-	else
-		printf("Packet sent successfully\n");
+		printf("\n\n IP Packet is %i bytes\n",ntohs(iph->tot_len));
+		printf("Fatal Error, Data in Ethernet Packet can't be >1500 byte, IP Packet must be shorter\n");
+	}*/
+
+	printf("pkt_len ist %i \n",pkt_len);
+	fflush(stdout);
+
+	/*else
+	{*/
+		packet = (unsigned char *)malloc(pkt_len);
+
+		//Copy Ethernet Header
+		memcpy(packet, ethernet_header, sizeof(struct ethhdr));
+
+		//Next Copy IPHDR
+		memcpy((packet + sizeof(struct ethhdr)), iph, (iph->ihl)*4);
+
+		//Copy TCPHDR
+		memcpy((packet + sizeof(struct ethhdr) + (iph->ihl)*4),tcph, (tcph->doff)*4);
+	
+		//Finally copy Data
+		memcpy((packet + sizeof(struct ethhdr) + (iph->ihl)*4 + (tcph->doff)*4), tcpdata, tcpdatalength /*1500-sizeof(struct ethhdr)-(iph->ihl)*4- (tcph->doff)*4*/);
+	
+		if(!SendRawPacket(raw, packet, pkt_len))
+		{
+			printf("Error sending packet due to error %s \n", strerror(errno));
+		}
+		
+		else
+		{
+			printf("Packet sent successfully\n");
+		}
+
+		free(packet);
+	/*}*/
 
 
 	free(ethernet_header);
 	free(iph);
 	free(tcph);
 	free(tcpdata);
-	free(packet);
+	
 
 	close(raw);
 
@@ -84,7 +102,6 @@ int CreateRawSocket(int protocol_to_sniff)
 
 int BindRawSocketToInterface(char *device, int rawsock, int protocol)
 {
-	
 	struct sockaddr_ll sll;
 	struct ifreq ifr;
 

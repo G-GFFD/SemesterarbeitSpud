@@ -191,6 +191,12 @@ int sendspud(int fd, struct spudpacket* spud)
 
 
 	int temp = send(fd, buf, size, 0);
+
+	printf("\n sent %i bytes \n",temp);
+	if(temp == -1)
+	{
+		printf("Error: %s\n", strerror());
+	}
 	
 	//Socket schliessen bei closetube();
 		

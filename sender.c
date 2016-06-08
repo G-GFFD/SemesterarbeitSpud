@@ -223,10 +223,12 @@ int main()
 			temptube = findtcptuple(tcpstream);
 			if(tcph->syn == 1)
 			{
+				printf("TCP SYN Flag is set\n");
+				printf("Total TCP Packet size (tcp options + tcp data) which shoud be < 1460 bytes is %i \n", (iph->tot_len)-((iph->ihl)*4+sizeof(struct tcphdr)));
 				//check if TCP MSS Option is set
 				
 				//32bit binary to set tcp option mss to 1446 byte
-				uint8_t mssoption[4] = {00000010, 00000100, 00000101,10100110};					
+				uint8_t mssoption[4] = {00000010, 00000100, 11111101,10100110};					//00000010, 00000100, 00000101,10100110
 				
 				if((tcph->doff)*4 > sizeof(struct tcphdr))
 				{
@@ -260,7 +262,9 @@ int main()
 								//copy smaller MTU in option
 								memcpy((void *)tcph+(tcph->doff)+i*4+2,mssoption+2,2);
 								updatetcpchecksum(tcph,iph,data);
-								printf("current bigger mss changed to 1446 bytes\n");
+								printf("current bigger TCP mss changed to 1446 bytes\n");
+								//recaluclate IP Checksum
+								updateipchecksum(iph);
 							}
 						}
 					}
@@ -279,7 +283,9 @@ int main()
 						tcph->doff = (tcph->doff)+1;//+= 1;
 						//update checksum
 						updatetcpchecksum(tcph, iph, data);
-						printf("added additional option to limit mss to 1446 bytes\n");
+						printf("added additional option to limit TCP mss to 1446 bytes\n");
+						iph->tot_len = iph->tot_len + 4;
+						updateipchecksum(iph);
 					}
 					
 				}
@@ -294,7 +300,9 @@ int main()
 					tcph->doff = tcph->doff+1;//+= 1;
 					//update checksum
 					updatetcpchecksum(tcph,iph,data);
-					printf("added option to limit mss to 1446 bytes\n");
+					printf("added option to limit TCP mss to 1446 bytes\n");
+					iph->tot_len = iph->tot_len + 4;
+					updateipchecksum(iph);
 					
 				}
 
@@ -303,7 +311,7 @@ int main()
 					//Neuer TCP Stream entdeckt für den noch keine tube existiert
 	
 					//Debug print new TCP STream
-					printf("New TCP Stream detected, opening Tube for: \n \n");
+					printf("\n \n Opening Tube for: \n \n");
 					printf("Src IP: %s Src Port %i \n",tcpstream->srcip,tcpstream->srcport);	
 					printf("Dest IP: %s Dest Port %i \n", tcpstream->destip, tcpstream->destport);		
 					opennewtube(receiver, tcpstream); //opennewtube könnte eigentlich tubeid zurückgeben			
