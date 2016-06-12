@@ -17,16 +17,23 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define SIZENLMSGBUFFER 102400
+#define SIZENLMSGBUFFER 1500
 #define NETLINK_USER 31
 #define MAX_PAYLOAD 1500
-#define SERVER "127.0.0.1"
+#define SERVER "10.2.119.166"
 #define PORT 3333
 #define HELLO "hello" //defines init message between this userspace programm and the kernel Module
 
+char serverip[16];
 
-int main()
+int main(int argc, char* argv[])
 {
+	/*printf("strlen %i\n", strlen(argv[1]));
+	if(argc > 1)
+	{
+		strncpy(serverip,argv[1],strlen(argv[1]));
+		strncpy(serverip+strlen(argv[1]),"\0",1);
+	}*/
 
 	struct sockaddr_nl src_addr, dest_addr;
 	struct nlmsghdr *nlh = NULL;
@@ -126,7 +133,6 @@ int main()
 
 	while(1)
 	{
-		printf("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - \n");
 		//1. Teil SPUDS empfangen und hier injecten
 
 		struct sockaddr_in* spudsource = malloc(sizeof(struct sockaddr_in));
@@ -134,6 +140,9 @@ int main()
 		if((size = recvfrom(s, buf, MAX_PAYLOAD, MSG_DONTWAIT,(struct sockaddr*) spudsource, &slen)) != -1)
 		{   	
 			// Extract SPUD from received UDP
+
+			printf("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - \n");
+			printf("received udp\n");
 
 			struct spudpacket* spud = malloc(sizeof(struct spudpacket));
 			struct spudheader* hdr = malloc(sizeof(struct spudheader));
@@ -155,6 +164,12 @@ int main()
 			
 			//was was wohin sendet nocheinmal anschauen
 			inet_aton(SERVER, &spudsource->sin_addr);
+			/*if((inet_aton(SERVER, &spudsource->sin_addr)) == 0)
+			{
+				printf("Invalid IP givne as Argument . . .setting to  127.0.0.1\n")	;
+				inet_aton("127.0.0.1",&spudsource->sin_addr);
+			}*/
+
 			spudsource->sin_port = htons(3332);
 			
 			handlereceivedpacket(spud,spudsource);
@@ -179,8 +194,11 @@ int main()
 
 		// Set Flag to MSG_DONTWAIT . . .. aber dann läuft es viel zu schnell durch die schleife
 	
-		if((size = recvmsg(sock_fd, &msg, 0)) != -1)
+		if((size = recvmsg(sock_fd, &msg, MSG_DONTWAIT)) != -1)
 		{
+			printf(". . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . \n");
+
+			printf("received new tcp from kernel\n");
 			void *message = malloc(SIZENLMSGBUFFER);
 			memcpy(message,NLMSG_DATA(nlh),SIZENLMSGBUFFER);
 
@@ -192,12 +210,19 @@ int main()
 			tcph = extracttcph(message,iph);
 			data = extracttcpdata(message,iph,tcph);
 			
+			printf("\n\n Just received from Kernel:\n");
+			updatetcpchecksum(tcph,iph,data);
+			
 			if(iph == NULL || tcph == NULL)
 			{
 				//problem, was nun?
 				break;
 			}
 			
+			if(data = NULL)
+			{
+				printf("This Packet only contains ipheader and tcpheader, but no data . . .\n");
+			}
 			free(message);
 			//setup struct soackaddr_in for external receiver of our spud packet
 			struct sockaddr_in* receiver = malloc(sizeof(struct sockaddr_in));
@@ -206,7 +231,14 @@ int main()
 			//send everything locally for now -> to be changed
 			receiver->sin_family = AF_INET;
 			inet_aton(SERVER, &receiver->sin_addr);
-			receiver->sin_port= htons(PORT);
+
+			/*if((inet_aton(SERVER, &spudsource->sin_addr)) == 0)
+			{
+				printf("Invalid IP givne as Argument . . .setting to 127.0.0.1\n")	;
+				inet_aton("127.0.0.1",&spudsource->sin_addr);
+			}*/
+
+			receiver->sin_port= htons(PORT-1);
 
 			//tcpverbindung des packets identifizieren
 			tcpstream = malloc(sizeof(struct tcptuple));
@@ -223,8 +255,9 @@ int main()
 			temptube = findtcptuple(tcpstream);
 			if(tcph->syn == 1)
 			{
+	
 				printf("TCP SYN Flag is set\n");
-				printf("Total TCP Packet size (tcp options + tcp data) which shoud be < 1460 bytes is %i \n", (iph->tot_len)-((iph->ihl)*4+sizeof(struct tcphdr)));
+				/*
 				//check if TCP MSS Option is set
 				
 				//32bit binary to set tcp option mss to 1446 byte
@@ -304,16 +337,16 @@ int main()
 					iph->tot_len = iph->tot_len + 4;
 					updateipchecksum(iph);
 					
-				}
+				}*/
 
 				if(temptube == NULL)
 				{
 					//Neuer TCP Stream entdeckt für den noch keine tube existiert
 	
 					//Debug print new TCP STream
-					printf("\n \n Opening Tube for: \n \n");
-					printf("Src IP: %s Src Port %i \n",tcpstream->srcip,tcpstream->srcport);	
-					printf("Dest IP: %s Dest Port %i \n", tcpstream->destip, tcpstream->destport);		
+					printf("\n \nOpening Tube for: \n \n");
+					printf("Source IP: %s Port %i \n",tcpstream->srcip,tcpstream->srcport);	
+					printf("Destination IP: %s Port %i \n", tcpstream->destip, tcpstream->destport);		
 					opennewtube(receiver, tcpstream); //opennewtube könnte eigentlich tubeid zurückgeben			
 					temptube = findtcptuple(tcpstream);
 			
@@ -348,8 +381,8 @@ int main()
 				struct listelement* this = searchlist(temptube);
 				if(this != NULL)
 				{
-					printf("Sending SPUD\n");
-					sendspud(this->fd,createspud(temptube,iph, tcph,data));
+					printf("Sending Data SPUD\n");
+					sendspud(this->fd,createspud(temptube,iph,tcph,data));
 				}
 			}
 

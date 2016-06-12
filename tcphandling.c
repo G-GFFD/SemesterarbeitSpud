@@ -42,7 +42,7 @@ struct tcphdr* extracttcph(void* buffer, struct iphdr* iph)
 char* extracttcpdata(void* buffer, struct iphdr* iph, struct tcphdr* tcph)
 {
 	//Finally extract TCP Data		
-	int tcpdatalenght = (int)(iph->tot_len)-((int)(tcph->doff)+((int)iph->ihl))*4;
+	int tcpdatalenght = (int)(ntohs(iph->tot_len))-((int)(tcph->doff)+((int)iph->ihl))*4;
 		
 	if(tcpdatalenght >0)
 	{
@@ -53,7 +53,10 @@ char* extracttcpdata(void* buffer, struct iphdr* iph, struct tcphdr* tcph)
 	
 	else
 	{
-		printf("INFO: TCP Datalenght is not > 0 . . . \n");
+		/*printf("INFO: TCP Datalenght is %i . . . \n",tcpdatalenght);
+		printf("ip->tot_len (ntohs): %i \n", ntohs(iph->tot_len));
+		printf("(tcph->doff+iph->ihl) *4 is %i\n", ((int)(tcph->doff)+((int)iph->ihl))*4);*/
+
 		return NULL;
 	}		
 
@@ -62,13 +65,15 @@ char* extracttcpdata(void* buffer, struct iphdr* iph, struct tcphdr* tcph)
 void updatetcpchecksum(struct tcphdr* tcph, struct iphdr* iph, char* data)
 {
 	//Allocate space for tcp header + tcpdata
-	void* payload = malloc((iph->tot_len)-(iph->ihl)*4);
+	void* payload = malloc(ntohs((iph->tot_len))-(iph->ihl)*4);
 
 	//Copy TCP header
 	memcpy(payload,tcph,(tcph->doff*4));
 
 	//Copy TCP data just behind
-	memcpy(payload+(tcph->doff*4), data, (iph->tot_len)-(iph->ihl + tcph->doff)*4);
+	memcpy(payload+(tcph->doff*4), data, (ntohs(iph->tot_len))-(iph->ihl + tcph->doff)*4);
+
+	printf("Original TCP checksum 0x%x and recalculated 0x%x\n\n",ntohs(tcph->check),ntohs(compute_tcp_checksum(iph,(unsigned short*)payload)));
 
 	tcph->check = compute_tcp_checksum(iph,(unsigned short*)payload);
 

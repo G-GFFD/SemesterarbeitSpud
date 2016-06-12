@@ -10,7 +10,7 @@
 #include <errno.h>
 #include <time.h>
 
-#define SERVER "127.0.0.1"
+#define SERVER "10.2.119.166"
 
 uint8_t magic[4] = {11011000,00000000,0000000,11011000};
 
@@ -98,7 +98,7 @@ int opennewtube(struct sockaddr_in* receiver, struct tcptuple* tcp)
 		//ganzer folgender abschnitt nochmals überdenken
 		memset(&localsource,0, sizeof(struct sockaddr_in));
 		inet_aton(SERVER, &receiver->sin_addr);
-		receiver->sin_port = htons(3334);
+		receiver->sin_port = htons(3332);
 		localsource.sin_port = htons(tubetcp->srcport-1);
 
 		if ( (fd=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
@@ -129,7 +129,7 @@ struct spudpacket* createspud(uint8_t* tubeid, struct iphdr *iph, struct tcphdr 
 
 	spud->hdr = header;
 
-	int tcpdatalenght = (int)(iph->tot_len)-((int)(tcph->doff)+((int)iph->ihl))*4;
+	int tcpdatalenght = (int)ntohs((iph->tot_len))-((int)(tcph->doff)+((int)iph->ihl))*4;
 
 	int iphdrlen = ((int)(iph->ihl)*4); // sizeof(struct iphdr) doesn't contain the options appended at the end
 	int tcphdrlen = ((int)(tcph->doff)*4);
@@ -137,9 +137,10 @@ struct spudpacket* createspud(uint8_t* tubeid, struct iphdr *iph, struct tcphdr 
 	spud->datalenght = tcpdatalenght + iphdrlen + tcphdrlen;
 
 	//check . . .
-	if(iph->tot_len != spud->datalenght)
+	if(ntohs(iph->tot_len) != spud->datalenght)
 	{
 		//This would indicate some data have gone missing.
+		printf("ntohs(iph->tot_len) != spud->datalenght in spud.c ln 143\n");	
 	}
 
 	//This if due to crashes because of ridiculusly high datalenght which caused a crash (happend rarely)
@@ -171,7 +172,7 @@ struct spudpacket* createspud(uint8_t* tubeid, struct iphdr *iph, struct tcphdr 
 
 int sendspud(int fd, struct spudpacket* spud)
 {
-	//This Function sends the SPUD Packet to the receiver (here called other)
+	//This Function sends the SPUD Packet to the fd
 
 	//find out size of spudpacket & tcpdata . . .
 	int size = sizeof(struct spudheader) + spud->datalenght;
@@ -189,13 +190,18 @@ int sendspud(int fd, struct spudpacket* spud)
 		free(spud->data);
 	}
 
-
+	printf("fd is %i, size is %i and buf starts at 0x%x \n",fd,size,buf);
 	int temp = send(fd, buf, size, 0);
 
-	printf("\n sent %i bytes \n",temp);
+	printf("\nsent %i bytes \n",temp);
 	if(temp == -1)
 	{
 		printf("Error: %s\n", strerror());
+	}
+
+	else
+	{
+		printf("\nSuccess sent %i bytes \n",temp);
 	}
 	
 	//Socket schliessen bei closetube();
@@ -251,6 +257,7 @@ int handlereceivedpacket(struct spudpacket* spud, struct sockaddr_in* receiver)
 		//check if bits in cmdflags are set 00xxxx
 		else if((!((spud->hdr->cmdflags & (1 << 6)) >> 6) &1) && (!((spud->hdr->cmdflags & (1 << 7)) >> 7) &1))
 		{
+			printf("Data Flag 00 detected\n\n");
 
 			struct iphdr *iph = NULL;
 			struct tcphdr *tcph = NULL;
@@ -260,10 +267,20 @@ int handlereceivedpacket(struct spudpacket* spud, struct sockaddr_in* receiver)
 			tcph = extracttcph(spud->data,iph);
 			data = extracttcpdata(spud->data,iph,tcph);
 
+			updatetcpchecksum(tcph,iph,data);
+
+			printf("\n\n Just extracted from data SPUD: \n");
+			updatetcpchecksum(tcph,iph,data);
+
+			printf("Total lenght of included IP Packet: %i bytes\n", ntohs(iph->tot_len));
+			printf("Sizeof IPHDR with Options: %i bytes\n",4*(iph->ihl));
+			printf("Sizeof TCPHDR with Options: %i bytes\n",4*(tcph->doff));
+			printf("Sizeof TCP Data: %i bytes\n\n", ntohs(iph->tot_len)-((iph->ihl)+(tcph->doff))*4);
+
 			if(iph != NULL && tcph != NULL)
 			{
 				injecttcp(iph, tcph, data);
-				printf("Iphdr, tcphdr, tcpdata extracted from spud, injection function called. . .\n");
+				//printf("Iphdr, tcphdr, tcpdata extracted from spud, injection function called. . .\n");
 			}
 
 			else

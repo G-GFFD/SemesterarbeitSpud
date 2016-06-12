@@ -23,31 +23,18 @@ int injecttcp(struct iphdr* iph, struct tcphdr* tcph, void* tcpdata)
 	struct ethhdr* ethernet_header;
 	int pkt_len;
 
-	int tcpdatalength = (int)(iph->tot_len)-((int)(tcph->doff)+((int)iph->ihl))*4;
+	int tcpdatalength = ntohs((iph->tot_len))-((int)(tcph->doff)+((int)iph->ihl))*4;
 	
 	raw = CreateRawSocket(ETH_P_ALL);
 
-	BindRawSocketToInterface("lo", raw, ETH_P_ALL);
+	BindRawSocketToInterface("eth0", raw, ETH_P_ALL);
 
 	ethernet_header = CreateEthernetHeader(SRC_ETHER_ADDR, DST_ETHER_ADDR, ETHERTYPE_IP);
 
-	CreatePseudoHeader(tcph, iph);
-
 	//Packet length
-	pkt_len = ntohs(iph->tot_len);
+	pkt_len = ntohs(iph->tot_len)+sizeof(struct ethhdr);//1000;//ntohs(iph->tot_len);
 
-	/*if(pkt_len > 1500)
-	{
-		printf("\n\n IP Packet is %i bytes\n",ntohs(iph->tot_len));
-		printf("Fatal Error, Data in Ethernet Packet can't be >1500 byte, IP Packet must be shorter\n");
-	}*/
-
-	printf("pkt_len ist %i \n",pkt_len);
-	fflush(stdout);
-
-	/*else
-	{*/
-		packet = (unsigned char *)malloc(pkt_len);
+		packet = (unsigned char *)malloc(pkt_len/*+sizeof(struct ethhdr)*/);
 
 		//Copy Ethernet Header
 		memcpy(packet, ethernet_header, sizeof(struct ethhdr));
@@ -65,14 +52,14 @@ int injecttcp(struct iphdr* iph, struct tcphdr* tcph, void* tcpdata)
 		{
 			printf("Error sending packet due to error %s \n", strerror(errno));
 		}
-		
+
 		else
 		{
-			printf("Packet sent successfully\n");
+			printf("TCP Injected!\n");
 		}
 
 		free(packet);
-	/*}*/
+
 
 
 	free(ethernet_header);
@@ -137,7 +124,7 @@ int SendRawPacket(int rawsock, unsigned char *pkt, int pkt_len)
 	if((sent = write(rawsock, pkt, pkt_len)) != pkt_len)
 	{
 		/* Error */
-		printf("Could only send %d bytes of packet of length %d\n", sent, pkt_len);
+		printf("Could only inject %d bytes of packet of length %d\n", sent, pkt_len);
 		return 0;
 	}
 
@@ -158,41 +145,4 @@ struct ethhdr* CreateEthernetHeader(char *src_mac, char *dst_mac, int protocol)
 	ethernet_header->h_proto = htons(protocol);
 
 	return (ethernet_header);
-}
-
-int CreatePseudoHeader(struct tcphdr *tcph, struct iphdr *iph)
-{
-	/* Find the size of the TCP Header + Data */
-	int segment_len = ntohs(iph->tot_len) - iph->ihl*4; 
-
-	/* Total length over which TCP checksum will be computed */
-	int header_len = sizeof(PseudoHeader) + segment_len;
-
-	unsigned char *hdr = (unsigned char *)malloc(header_len);
-
-	PseudoHeader *pseudo_header = (PseudoHeader *)hdr;
-
-	pseudo_header->source_ip = iph->saddr;
-	pseudo_header->dest_ip = iph->daddr;
-	pseudo_header->reserved = 0;
-	pseudo_header->protocol = iph->protocol;
-	pseudo_header->tcp_length = htons(segment_len);
-
-	
-	//Copy TCP
-	memcpy((hdr + sizeof(PseudoHeader)), tcph, /*tcph->doff*4*/sizeof(struct tcphdr));
-
-	/*
-	//Copy Data
-	int tcpdatalength = (int)(iph->tot_len)-((int)(tcph->doff)+((int)iph->ihl))*4;
-
-	printf("Allocated: %i, Size PseudoHeader %i, Size TCPHDR %i, tcpdatalenght %i",header_len,sizeof(PseudoHeader),sizeof(struct tcphdr),tcpdatalength);
-	fflush(stdout);
-	memcpy((hdr + sizeof(PseudoHeader) + sizeof(struct tcphdr)), data, tcpdatalength);
-	*/
-
-	free(hdr);
-
-	return 1;
-
 }

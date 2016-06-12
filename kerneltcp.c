@@ -38,7 +38,7 @@ int pid;
 static void startsession(struct sk_buff *skb)
 {
 
-	//Receives init Message from Userspace Application, starts to send captures TCP packets to this PID
+	//Receives init Message from Userspace Application, starts to send captured TCP packets to this PID
 
 	struct nlmsghdr *nlh;
 
@@ -64,8 +64,7 @@ static void sendtouserspace(struct sk_buff *skb)
 		
 		struct sk_buff *skb_out;
 		struct nlmsghdr *nlh;
-		
-		skb_out = nlmsg_new(iph->tot_len,0);
+		skb_out = nlmsg_new(ntohs(iph->tot_len)/*iph->tot_len*/,0);
 
 		if(!skb_out)
 		{
@@ -73,10 +72,10 @@ static void sendtouserspace(struct sk_buff *skb)
    			return;
 		} 
 	
-		nlh=nlmsg_put(skb_out,0,0,NLMSG_DONE,iph->tot_len,0);  
+		nlh=nlmsg_put(skb_out,0,0,NLMSG_DONE,ntohs(iph->tot_len),0);  
 		NETLINK_CB(skb_out).dst_group = 0;
 
-		memcpy(nlmsg_data(nlh),iph,iph->tot_len);
+		memcpy(nlmsg_data(nlh),iph,ntohs(iph->tot_len));
 
 		int tmp;
 		
@@ -88,7 +87,6 @@ static void sendtouserspace(struct sk_buff *skb)
 		else
 		{
 			printk(KERN_INFO "Sucessfully sent skbuff to user\n");
-			printk(KERN_INFO "iph->tot_len %i and sizeof nlmsg: %i\n",iph->tot_len, nlh->nlmsg_len);
 		}
 
 		//kfree(skb_out); don't free this or kernel panic happens!
@@ -135,7 +133,6 @@ unsigned int hook_func(unsigned int hooknum, struct sk_buff **skb, const struct 
 
 int init_module(void) 
 {
-	printk("domidomidomi");
 	//Netlink Part
 	struct netlink_kernel_cfg cfg = {
   	  .input = messagereceived,
@@ -153,7 +150,7 @@ int init_module(void)
 
 	//Netfilter Part
 	nfho.hook = hook_func;
-        nfho.hooknum = NF_INET_PRE_ROUTING;
+        nfho.hooknum = NF_INET_POST_ROUTING;//NF_INET_PRE_ROUTING; // ev. auf Post-routing ändern, damit iptables die tcp mss ändern konnte . . .
         nfho.pf = PF_INET;
         nfho.priority = NF_IP_PRI_FIRST;
  
