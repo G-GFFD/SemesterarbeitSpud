@@ -12,11 +12,12 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
-#include "tcphandling.h"
 #include <sys/types.h>
 #include <unistd.h>
 #include <pthread.h>
+
 #include "spud.h"
+#include "tcphandling.h"
 
 #define NETLINK_USER 31
 #define MAX_PAYLOAD 1500
@@ -27,13 +28,13 @@
 void *receivespud(void* argumnet)
 {
 	// Create UDP socket
-	int size;
+	int size,s;
 	struct sockaddr_in myself;
-    	int s;
+    
 	socklen_t slen=sizeof(struct sockaddr_in);
 	void *buf = malloc(MAX_PAYLOAD);
  
-	if ( (s=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
+	if ( (s=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1 )
 	{
 		printf("Failed to create socket!");
 	}
@@ -80,7 +81,6 @@ void *receivespud(void* argumnet)
 			inet_aton(SERVER, &spudsource->sin_addr);
 			spudsource->sin_port = htons(3332); //Set standart SPUD Port where Receiver expects to receive SPUD packets
 		
-			//handlereceivedpacket()
 			HandleReceivedPacket(spud,spudsource);
 						
 			//Set buffers to zero
@@ -104,7 +104,7 @@ void *tcptospud(void* argument)
 {
 	//Capture TCP from Kernel and send them over SPUD
 
-	//Initiate connection with Kernel
+	// First initiate connection with Kernel
 
 	struct sockaddr_nl src_addr, dest_addr;
 	struct nlmsghdr *nlh = NULL;
@@ -148,7 +148,12 @@ void *tcptospud(void* argument)
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 
-	sendmsg(sock_fd,&msg,0);
+	int i= sendmsg(sock_fd,&msg,0);
+
+	if(i < 0)
+	{
+		printf("Init message to kernel sent, error %s\n", strerror(errno));
+	}
 
 	while(1)
 	{
@@ -159,7 +164,7 @@ void *tcptospud(void* argument)
 		if((size = recvmsg(sock_fd, &msg, 0)) != -1)
 		{
 			printf(". . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . \n");
-			printf("received new tcp from kernel\n");
+			//printf("received new tcp of lenght %i from kernel\n", size);
 			
 			void *message = malloc(MAX_PAYLOAD);
 			memcpy(message,NLMSG_DATA(nlh), MAX_PAYLOAD);
@@ -225,8 +230,7 @@ void *tcptospud(void* argument)
 
 					else
 					{
-						struct spudpacket *spud = CreateSPUD(temptube, iph, tcph, data);
-						SendSPUD(spud);
+						SendSPUD( CreateSPUD(temptube, iph, tcph, data) );
 					}
 				}
 			}
@@ -264,43 +268,84 @@ void *status(void* argument)
 	while(1)
 	{
 		// Check Tubes for Timeouts
-		struct listelement* temp = current; // current must always point to the last element in the list
-		int i = 0;
-
-		while(temp->previous != NULL)
+		if(current != NULL) //at the beginning the list is empty
 		{
-			printf("\n\n\n\n\n ----------------------------------------------------- \n \n");
-			i++;
-			(temp->timeout)--;
+			struct listelement* temp = current; // current must always point to the last element in the list
+			int i = 0;
 
-			if(temp->timeout == 0)
+			while(temp->previous != NULL)
 			{
-				//printf fremovingtube xxx
+				printf("\n\n\n\n\n ----------------------------------------------------- \n \n");
+				i++;
+				(temp->timeout)--;
+
+				if(temp->timeout == 0)
+				{
+					//printf fremovingtube xxx
 				
-				close(temp->fd);
-				free(temp->receiver);
-				free(temp->tcp);
+					close(temp->fd);
+
+					if(temp->receiver != NULL)
+					{
+						free(temp->receiver);
+					}
+
+					else
+					{
+						printf("Info: Receiver to be freed was NULL . . . \n");
+					}
+
+					if(temp->tcp != NULL)
+					{
+						free(temp->tcp);
+					}
+
+					else
+					{
+						printf("Info: TCP tuple to be freed was NULL . . . \n");
+					}
+
+					
 				
-				temp = temp->previous;
+					temp = temp->previous;
 
-				removetube(temp->next);
+					removetube(temp->next);
+				}
+
+				else
+				{
+					printf("Active Tube # %i - ", i);
+					// tubeid, tcptuple etc. printen
+					printf("Tubeid: ");
+					
+					int o;
+
+					for(o=0; o<8; o++)
+					{
+						printf(" %i ", (int) temp->tubeid[o]);
+					}
+					
+					printf("\n\nSource IP: %s Port %i \n",temp->tcp->srcip,temp->tcp->srcport);	
+					printf("Destination IP: %s Port %i \n\n\n", temp->tcp->destip, temp->tcp->destport);		
+
+
+					temp = temp->previous;
+				}
+
 			}
+		
+			// Display Status Infos about open Tubes
+			printf("Number of Open Tubes: %i\n", i);
 
-			else
-			{
-				printf("Active Tube found");
-				// tubeid, tcptuple etc. printen
-				temp = temp->previous;
-			}
-
+			printf("\n\n ----------------------------------------------------- \n\n");
 		}
 
-		// Display Status Infos about open Tubes
-		printf("# Open Tubes: %i\n", i);
-
-		printf("\n\n ----------------------------------------------------- \n\n\n\n\n");
-
-		wait(10);
+		else
+		{
+			printf("\n No active Tube yet \n");
+		}
+		
+		sleep(10);
 	}
 }
 

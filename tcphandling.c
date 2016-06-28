@@ -8,10 +8,10 @@
 
 struct iphdr* extractiph(void* buffer)
 {
-		struct iphdr* iph = malloc ( (((struct iphdr*)iph)->ihl)*4 );
-		memcpy(iph,buffer, (((struct iphdr*)iph)->ihl)*4);		
+		/*struct iphdr* iph = malloc ( (((struct iphdr*)iph)->ihl)*4 );
+		memcpy(iph,buffer, (((struct iphdr*)iph)->ihl)*4);	*/	
 	
-		/*struct iphdr* iph = malloc(sizeof(struct iphdr));
+		struct iphdr* iph = malloc(sizeof(struct iphdr));
 		memcpy(iph, buffer, sizeof(struct iphdr));
 
 		if(iph->ihl > 5)
@@ -20,7 +20,7 @@ struct iphdr* extractiph(void* buffer)
 			//Allocate more space and copy them behind
 			iph = realloc(iph, iph->ihl * 4);
 			memcpy(iph,buffer,(iph->ihl)*4);	
-		}*/
+		}
 
 		return iph;
 
@@ -76,7 +76,7 @@ void updatetcpchecksum(struct tcphdr* tcph, struct iphdr* iph, char* data)
 	//Copy TCP data just behind
 	memcpy(payload+(tcph->doff*4), data, (ntohs(iph->tot_len))-(iph->ihl + tcph->doff)*4);
 
-	printf("Original TCP checksum 0x%x and recalculated 0x%x\n\n",ntohs(tcph->check),ntohs(compute_tcp_checksum(iph,(unsigned short*)payload)));
+	//printf("Original TCP checksum 0x%x and recalculated 0x%x\n\n",ntohs(tcph->check),ntohs(compute_tcp_checksum(iph,(unsigned short*)payload)));
 
 	tcph->check = compute_tcp_checksum(iph,(unsigned short*)payload);
 

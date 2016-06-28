@@ -39,6 +39,7 @@ static void startsession(struct sk_buff *skb)
 {
 
 	//Receives init Message from Userspace Application, starts to send captured TCP packets to this PID
+	printk(KERN_ERR "Message from Userspace received");
 
 	struct nlmsghdr *nlh;
 
@@ -55,7 +56,6 @@ static void startsession(struct sk_buff *skb)
 
 static void sendtouserspace(struct sk_buff *skb)
 {
-	printk("senttouserspace\n");
 	if(session == 1)
 	{
 		struct iphdr *iph;          /* IPv4 header */
@@ -130,7 +130,7 @@ int init_module(void)
 {
 	//Netlink Part
 	struct netlink_kernel_cfg cfg = {
-  	  .input = sendtouserspace,
+  	  .input = startsession,
 	};
 
 	nl_sk = netlink_kernel_create(&init_net, NETLINK_USER, &cfg);

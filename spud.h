@@ -22,7 +22,7 @@ struct spudpacket
 int IdGenerator(uint8_t* tubeid);
 
 //This Function opens a new Tube to a Receiver, adds it to the local list and sends the open spud packet
-int OpenNewTube(struct sockaddr_in* receiver, struct tcptuple* tcp);
+uint8_t* OpenNewTube(struct sockaddr_in* receiver, struct tcptuple* tcp);
 
 //This Function creates and returns a spudpacket out of a tubeid, iphdr, tcphdr and tcpdata
 struct spudpacket* CreateSPUD(uint8_t* tubeid, struct iphdr *iph, struct tcphdr *tcph, void* tcpdata);

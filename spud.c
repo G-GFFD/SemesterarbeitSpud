@@ -9,8 +9,10 @@
 #include "spud.h"
 #include <errno.h>
 #include <time.h>
+#include <stdio.h>
 
 #define SERVER "10.2.115.157"
+#define TubeTimeOut 6
 
 uint8_t magic[4] = {11011000,00000000,0000000,11011000};
 
@@ -50,30 +52,21 @@ int IdGenerator(uint8_t* tubeid)
 	
 }
 
-int OpenNewTube(struct sockaddr_in* receiver, struct tcptuple* tcp)
+uint8_t* OpenNewTube(struct sockaddr_in* receiver, struct tcptuple* tcp)
 {
-	//This Function opens a new Tube to a Receiver, adds it to the local list and sends the open spud packet
+	//This Function opens a new Tube to a Receiver, adds it to the local list
 
-		//Open new Tube
-		struct spudheader* newspudheader = MallocSpudHeader();
+		uint8_t* newtubeid = malloc(8*sizeof(uint8_t));
 	
 		//just to make sure new tube id is not already taken
 		do{
-		IdGenerator(newspudheader->tubeid);
-		}while(searchlist(newspudheader->tubeid) != NULL);
+		IdGenerator(newtubeid);
+		}while(searchlist(newtubeid) != NULL);
 		//wihtout do-while I got multiple tubes with the same id if they were created immediatley after another, strange . . ..
-
-		newspudheader->cmdflags = 0;
-		newspudheader->cmdflags |= 1<<6; //set to 0b1000000;
-
-		struct spudpacket* newspud = malloc(sizeof(struct spudpacket));
-		newspud->hdr = newspudheader;
-		newspud->datalenght = 0;
-		newspud->data = NULL;
 
 		//Create Status in List of Open Tubes
 		struct listelement *newentry = malloc(sizeof(struct listelement));
-		memcpy(newentry->tubeid,newspudheader->tubeid,8*sizeof(uint8_t));
+		memcpy(newentry->tubeid,newtubeid,8*sizeof(uint8_t));
 
 		//copy tcptuple to store in list, as original tuple will be free in sender.c (due to current implementation)
 		struct tcptuple* tubetcp = malloc(sizeof(struct tcptuple));
@@ -95,7 +88,7 @@ int OpenNewTube(struct sockaddr_in* receiver, struct tcptuple* tcp)
 		struct sockaddr_in localsource;
 		int fd;
 
-		//ganzer folgender abschnitt nochmals überdenken
+		//At the moment, set fixed receiver. Later just adjust port.
 		memset(&localsource,0, sizeof(struct sockaddr_in));
 		inet_aton(SERVER, &receiver->sin_addr);
 		receiver->sin_port = htons(3332);
@@ -113,7 +106,7 @@ int OpenNewTube(struct sockaddr_in* receiver, struct tcptuple* tcp)
 
 		newentry->fd=fd;
 
-		SendSPUD(newspud);	
+		return newtubeid;	
 	
 }
 
@@ -181,6 +174,7 @@ int SendSPUD(struct spudpacket* spud)
 	if(thistube == NULL)
 	{
 		//Problem . . .
+		return 0;
 
 	}
 	//This Function sends the SPUD Packet to the fd
@@ -203,7 +197,9 @@ int SendSPUD(struct spudpacket* spud)
 
 	int temp = send(thistube->fd, buf, size, 0);
 
-	printf("\nsent %i bytes \n",temp);
+	//Reset Tube Time-out
+	thistube->timeout = TubeTimeOut;
+
 	if(temp == -1)
 	{
 		printf("Error: %s\n", strerror());
@@ -211,7 +207,7 @@ int SendSPUD(struct spudpacket* spud)
 
 	else
 	{
-		printf("\nSuccess sent %i bytes \n",temp);
+		printf("\nSPUD sent! \n",temp);
 	}
 		
 	free(buf);

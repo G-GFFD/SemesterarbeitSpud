@@ -23,16 +23,23 @@ void removetube(struct listelement* old)
 	if(old == NULL) return;
 	
 	//Case 1: Element in der Mitte der Liste
-	if(old->previous != NULL)
+	if(old->previous != NULL && old->next != NULL)
 	{
 		old->previous->next = old->next;
 		old->next->previous = old->previous;
 	}
 	
-	//Case 2: letztes Element
-	else
+	//Case 3: first Element of the list at the beginning
+	else if(old->previous == NULL && old->next != NULL)
 	{
 		old->next->previous = NULL;
+	}
+
+	//case 3: latest, most recent Element of the list
+
+	else if(old->previous != NULL && old->next == NULL)
+	{
+		current = old->previous;
 	}
 
 	//Element löschen
