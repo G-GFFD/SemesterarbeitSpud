@@ -101,11 +101,6 @@ static void sendtouserspace(struct sk_buff *skb)
 
 }
 
-static void messagereceived(struct sk_buff *skb)
-{
-	startsession(skb);
-}
-
 
 unsigned int hook_func(unsigned int hooknum, struct sk_buff **skb, const struct net_device *in, const struct net_device *out, int (*okfn)(struct sk_buff *))
 {
@@ -135,7 +130,7 @@ int init_module(void)
 {
 	//Netlink Part
 	struct netlink_kernel_cfg cfg = {
-  	  .input = messagereceived,
+  	  .input = sendtouserspace,
 	};
 
 	nl_sk = netlink_kernel_create(&init_net, NETLINK_USER, &cfg);

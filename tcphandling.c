@@ -8,7 +8,10 @@
 
 struct iphdr* extractiph(void* buffer)
 {
-		struct iphdr* iph = malloc(sizeof(struct iphdr));
+		struct iphdr* iph = malloc ( (((struct iphdr*)iph)->ihl)*4 );
+		memcpy(iph,buffer, (((struct iphdr*)iph)->ihl)*4);		
+	
+		/*struct iphdr* iph = malloc(sizeof(struct iphdr));
 		memcpy(iph, buffer, sizeof(struct iphdr));
 
 		if(iph->ihl > 5)
@@ -17,7 +20,7 @@ struct iphdr* extractiph(void* buffer)
 			//Allocate more space and copy them behind
 			iph = realloc(iph, iph->ihl * 4);
 			memcpy(iph,buffer,(iph->ihl)*4);	
-		}
+		}*/
 
 		return iph;
 

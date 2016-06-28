@@ -14,6 +14,8 @@ struct listelement
 	uint8_t status;
 
 	int fd;
+	int tcpfinsent;
+	int timeout;
 	
 	
 }listelement;

@@ -11,6 +11,9 @@ void addtube(struct listelement* next)
 	}
 
 	current = next;
+
+	current->tcpfinsent = 0; // initialize to 0
+	current->timeout = 6;
 		
 }
 

@@ -25,7 +25,7 @@ int injecttcp(struct iphdr* iph, struct tcphdr* tcph, void* tcpdata)
 
 	int tcpdatalength = ntohs((iph->tot_len))-((int)(tcph->doff)+((int)iph->ihl))*4;
 	
-	raw = CreateRawSocket(ETH_P_ALL);
+	raw = CreateRawSocket();
 
 	BindRawSocketToInterface("eth0", raw, ETH_P_ALL);
 
@@ -74,11 +74,11 @@ int injecttcp(struct iphdr* iph, struct tcphdr* tcph, void* tcpdata)
 }
 
 
-int CreateRawSocket(int protocol_to_sniff)
+int CreateRawSocket()
 {
 	int rawsock;
 
-	if((rawsock = socket(PF_PACKET, SOCK_RAW, htons(protocol_to_sniff)))== -1)
+	if((rawsock = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL)))== -1)
 	{
 		printf("Error creating raw socket! Errno: %s", strerror(errno));
 		exit(-1);
