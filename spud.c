@@ -257,9 +257,9 @@ int HandleReceivedPacket(struct spudpacket* spud, struct sockaddr_in* receiver)
 		struct tcphdr *tcph = NULL;
 		char *data = NULL;
 
-		extractiph(iph, spud->data);
-		extracttcph(tcph, spud->data,iph);
-		extracttcpdata(data, spud->data,iph,tcph);
+		iph = extractiph(spud->data);
+		tcph = extracttcph(spud->data,iph);
+		data = extracttcpdata(spud->data,iph,tcph);
 
 		updatetcpchecksum(tcph,iph,data);
 

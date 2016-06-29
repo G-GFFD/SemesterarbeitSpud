@@ -173,9 +173,9 @@ void *tcptospud(void* argument)
 			struct tcphdr *tcph = NULL;
 			char *data = NULL;
 
-			extractiph(iph, message);
-			extracttcph(tcph, message,iph);
-			extracttcpdata(data, message,iph,tcph);
+			iph = extractiph(message);
+			tcph = extracttcph(message,iph);
+			data = extracttcpdata(message,iph,tcph);
 			
 			updatetcpchecksum(tcph,iph,data);
 			
@@ -287,7 +287,7 @@ void *status(void* argument)
 
 					if(temp->receiver != NULL)
 					{
-						free(temp->receiver);
+						free(temp->receiver);q
 					}
 
 					else
