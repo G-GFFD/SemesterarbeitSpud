@@ -117,7 +117,7 @@ void *tcptospud(void* argument)
 	if( (sock_fd=socket(PF_NETLINK, SOCK_RAW, NETLINK_USER))<0)
 	{
 		printf("Opening Netlink socket failed! (Kernel Module not loaded?)");
-		return -1;
+		return;
 	}
 
 	memset(&src_addr, 0, sizeof(src_addr));
@@ -173,9 +173,9 @@ void *tcptospud(void* argument)
 			struct tcphdr *tcph = NULL;
 			char *data = NULL;
 
-			iph = extractiph(message);
-			tcph = extracttcph(message,iph);
-			data = extracttcpdata(message,iph,tcph);
+			extractiph(iph, message);
+			extracttcph(tcph, message,iph);
+			extracttcpdata(data, message,iph,tcph);
 			
 			updatetcpchecksum(tcph,iph,data);
 			
@@ -375,7 +375,7 @@ int main(int argc, char* argv[])
 	}
 
 	
-	while(pthread_join(&ReceiveSPUD,NULL) != 0)
+	while(pthread_join(ReceiveSPUD,NULL) != 0)
 	{	
 
 	}

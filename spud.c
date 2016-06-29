@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <time.h>
 #include <stdio.h>
+#include <string.h>
 
 #define SERVER "10.2.115.157"
 #define TubeTimeOut 6
@@ -202,7 +203,7 @@ int SendSPUD(struct spudpacket* spud)
 
 	if(temp == -1)
 	{
-		printf("Error: %s\n", strerror());
+		printf("Error: %s\n", strerror(errno));
 	}
 
 	else
@@ -256,9 +257,9 @@ int HandleReceivedPacket(struct spudpacket* spud, struct sockaddr_in* receiver)
 		struct tcphdr *tcph = NULL;
 		char *data = NULL;
 
-		iph = extractiph(spud->data);
-		tcph = extracttcph(spud->data,iph);
-		data = extracttcpdata(spud->data,iph,tcph);
+		extractiph(iph, spud->data);
+		extracttcph(tcph, spud->data,iph);
+		extracttcpdata(data, spud->data,iph,tcph);
 
 		updatetcpchecksum(tcph,iph,data);
 
@@ -370,14 +371,14 @@ int FinishTubeClosure(uint8_t* tubeid, struct iphdr *iph, struct tcphdr *tcph, v
 	
 }
 
-int InitiateTubeClosure(uint8_t* tubeid, struct iphdr *iph, struct tcphdr *tcph, void* tcpdata)
+int InitiateTubeClosure(struct listelement* this, struct iphdr *iph, struct tcphdr *tcph, void* tcpdata)
 {
-		struct listelement* this = searchlist(tubeid);
+		//struct listelement* this = searchlist(tubeid);
 		
 		if(this != NULL)
 		{
 			this->tcpfinsent = 1;
-			SendSPUD(CreateSPUD(tubeid, iph, tcph, tcpdata));
+			SendSPUD(CreateSPUD(this->tubeid, iph, tcph, tcpdata));
 		}
 		
 		return 1;

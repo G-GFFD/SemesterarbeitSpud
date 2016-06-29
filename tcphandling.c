@@ -6,12 +6,12 @@
 #include <stdio.h>
 #include "tcphandling.h"
 
-struct iphdr* extractiph(void* buffer)
+void extractiph(struct iphdr* iph, void* buffer)
 {
 		/*struct iphdr* iph = malloc ( (((struct iphdr*)iph)->ihl)*4 );
 		memcpy(iph,buffer, (((struct iphdr*)iph)->ihl)*4);	*/	
 	
-		struct iphdr* iph = malloc(sizeof(struct iphdr));
+		iph = malloc(sizeof(struct iphdr));
 		memcpy(iph, buffer, sizeof(struct iphdr));
 
 		if(iph->ihl > 5)
@@ -22,13 +22,13 @@ struct iphdr* extractiph(void* buffer)
 			memcpy(iph,buffer,(iph->ihl)*4);	
 		}
 
-		return iph;
+		return;
 
 }
 
-struct tcphdr* extracttcph(void* buffer, struct iphdr* iph)
+void extracttcph(struct tcphdr* tcph, void* buffer, struct iphdr* iph)
 {
-	struct tcphdr* tcph = malloc(sizeof(struct tcphdr));
+	tcph = malloc(sizeof(struct tcphdr));
 	memcpy(tcph, buffer+(iph->ihl)*4, sizeof(struct tcphdr));
 
 	if(tcph->doff > 5)
@@ -38,20 +38,20 @@ struct tcphdr* extracttcph(void* buffer, struct iphdr* iph)
 		memcpy(tcph,buffer+(iph->ihl)*4,(tcph->doff)*4);
 	}
 	
-	return tcph;
+	return;
 
 }
 
-char* extracttcpdata(void* buffer, struct iphdr* iph, struct tcphdr* tcph)
+void extracttcpdata(char* data, void* buffer, struct iphdr* iph, struct tcphdr* tcph)
 {
 	//Finally extract TCP Data		
 	int tcpdatalenght = (int)(ntohs(iph->tot_len))-((int)(tcph->doff)+((int)iph->ihl))*4;
 		
 	if(tcpdatalenght >0)
 	{
-		char* data = malloc(tcpdatalenght);
+		data = malloc(tcpdatalenght);
 		memcpy(data, buffer+(iph->ihl)*4+(tcph->doff)*4, tcpdatalenght);
-		return data;
+		return;
 	}
 	
 	else
@@ -60,7 +60,7 @@ char* extracttcpdata(void* buffer, struct iphdr* iph, struct tcphdr* tcph)
 		printf("ip->tot_len (ntohs): %i \n", ntohs(iph->tot_len));
 		printf("(tcph->doff+iph->ihl) *4 is %i\n", ((int)(tcph->doff)+((int)iph->ihl))*4);*/
 
-		return NULL;
+		return;
 	}		
 
 }

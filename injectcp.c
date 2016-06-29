@@ -1,4 +1,4 @@
-// Injecttcp nach Beispiel
+// Injecttcp nach Beispiel - Variante 1: Injectes Ethernet Packet
 
 #include "injectcp.h"
 #include <stdio.h>
@@ -14,25 +14,35 @@
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <arpa/inet.h>
+#include <string.h>
 
+int raw = 0;
+struct ethhdr* ethernet_header = NULL;
 
 int injecttcp(struct iphdr* iph, struct tcphdr* tcph, void* tcpdata)
 {
-	int raw;
+	if(raw == 0)
+	{
+		//Create Socket only on first call of injecttcp and keep it open
+		raw = CreateRawSocket();
+		BindRawSocketToInterface("eth0", raw, ETH_P_ALL);
+	}
+
+	if(ethernet_header == NULL)
+	{
+		//Create Ethernet header once and store it
+		ethernet_header = CreateEthernetHeader(SRC_ETHER_ADDR, DST_ETHER_ADDR, ETHERTYPE_IP);
+
+	
+	}
+
 	unsigned char *packet;
-	struct ethhdr* ethernet_header;
 	int pkt_len;
 
 	int tcpdatalength = ntohs((iph->tot_len))-((int)(tcph->doff)+((int)iph->ihl))*4;
-	
-	raw = CreateRawSocket();
-
-	BindRawSocketToInterface("eth0", raw, ETH_P_ALL);
-
-	ethernet_header = CreateEthernetHeader(SRC_ETHER_ADDR, DST_ETHER_ADDR, ETHERTYPE_IP);
 
 	//Packet length
-	pkt_len = ntohs(iph->tot_len)+sizeof(struct ethhdr);//1000;//ntohs(iph->tot_len);
+	pkt_len = ntohs(iph->tot_len)+sizeof(struct ethhdr);
 
 		packet = (unsigned char *)malloc(pkt_len/*+sizeof(struct ethhdr)*/);
 
@@ -58,17 +68,13 @@ int injecttcp(struct iphdr* iph, struct tcphdr* tcph, void* tcpdata)
 			printf("TCP Injected!\n");
 		}
 
-		free(packet);
-
-
-
-	free(ethernet_header);
+	free(packet);
 	free(iph);
 	free(tcph);
 	free(tcpdata);
 	
 
-	close(raw);
+	//close(raw);
 
 	return 0;
 }
@@ -138,7 +144,7 @@ struct ethhdr* CreateEthernetHeader(char *src_mac, char *dst_mac, int protocol)
 	ethernet_header = (struct ethhdr *)malloc(sizeof(struct ethhdr));
 
 	// copy mac adresses
-	memcpy(ethernet_header->h_source, (void *)ether_aton(src_mac), 6);
+	memcpy(ethernet_header->h_source, (void*)ether_aton(src_mac),6);
 	memcpy(ethernet_header->h_dest, (void *)ether_aton(dst_mac), 6);
 
 	// set protocol to tcp

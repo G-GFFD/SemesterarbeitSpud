@@ -46,4 +46,4 @@ struct spudheader* MallocSpudHeader();
 int FinishTubeClosure(uint8_t* tubeid, struct iphdr *iph, struct tcphdr * tcph, void* tcpdata);
 
 // FIN flag detected, prepare Tube closure
-int InitiateTubeClosure(uint8_t* tubeid, struct iphdr *iph, struct tcphdr *tcph, void* tcpdata);
+int InitiateTubeClosure(struct listelement* this, struct iphdr *iph, struct tcphdr *tcph, void* tcpdata);

@@ -1,5 +1,7 @@
 #include "tubelist.h"
 #include <stddef.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 void addtube(struct listelement* next)
 {
