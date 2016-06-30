@@ -216,21 +216,31 @@ void *tcptospud(void* argument)
 
 			if(temptube != NULL)
 			{
-				if(searchlist(temptube)->tcpfinsent == 1)
-				{
-					FinishTubeClosure(temptube, iph,tcph,data);
-				}
-			
-				else
-				{
-					if(tcph->fin ==1)
-					{
-						InitiateTubeClosure(searchlist(temptube),iph,tcph,data);
-					}
+				//There have been cases where temptube was != null but searchlist returned no listelement. Probably critical section / tube got deleted inbetween
+				struct listelement *now = searchlist(temptube);
+				now->timeout = 6; // worst case switcht der thread hier dazwischen und lösch tube . . . (critical section)
 
+				if(now != NULL)
+				{
+					if(now->tcpfinseen == 1)
+					{
+						if(now->finseqnr < tcph->seq)
+						{
+							FinishTubeClosure(temptube, iph,tcph,data);
+						}
+					}
+				
 					else
 					{
-						SendSPUD( CreateSPUD(temptube, iph, tcph, data) );
+						if(tcph->fin ==1)
+						{
+							InitiateTubeClosure(searchlist(temptube),iph,tcph,data);
+						}
+
+						else
+						{
+							SendSPUD( CreateSPUD(temptube, iph, tcph, data) );
+						}
 					}
 				}
 			}
@@ -255,7 +265,7 @@ void *tcptospud(void* argument)
 			free(tcph);
 			free(iph);
 			free(data);
-			free(receiver);
+			//free(receiver);
 		}
 		
 	}
@@ -282,12 +292,22 @@ void *status(void* argument)
 				if(temp->timeout == 0)
 				{
 					//printf fremovingtube xxx
+
+					int o;
+
+					printf("Removing Tube ");
+					for(o=0; o<8; o++)
+					{
+						printf(" %i ", (int) temp->tubeid[o]);
+					}
+					printf(" after time-out.\n");
 				
 					close(temp->fd);
 
 					if(temp->receiver != NULL)
 					{
-						free(temp->receiver);q
+						free(temp->receiver);
+						temp->receiver = NULL;
 					}
 
 					else
@@ -310,12 +330,12 @@ void *status(void* argument)
 					temp = temp->previous;
 
 					removetube(temp->next);
+					i--;
 				}
 
 				else
 				{
 					printf("Active Tube # %i - ", i);
-					// tubeid, tcptuple etc. printen
 					printf("Tubeid: ");
 					
 					int o;

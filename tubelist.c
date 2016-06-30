@@ -14,7 +14,7 @@ void addtube(struct listelement* next)
 
 	current = next;
 
-	current->tcpfinsent = 0; // initialize to 0
+	current->tcpfinseen = 0; // initialize to 0
 	current->timeout = 6;
 		
 }
@@ -110,6 +110,7 @@ int comparetcptuple(struct tcptuple* a, struct tcptuple* b)
 	{
 		//debug . ..
 		printf("Error, one of the ip pointers in the tcptouple is NULL\n");
+		return 0;
 	}
 
 	if(a->srcport == b->srcport && a->destport==b->destport && strcmp(a->srcip,b->srcip)==0 && strcmp(a->destip,b->destip)==0) return 1;

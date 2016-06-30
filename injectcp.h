@@ -1,16 +1,11 @@
-//This File provides functions to inject an IP packet, it's done by wrapping it into an Ethernet Packet and sending it via a raw socket to the Interface
+//Injectcp nach tcpcrypt - Variante 3
 
-#define SRC_ETHER_ADDR "08:00:27:9b:8f:70"//"aa:aa:aa:aa:aa:aa"
-#define DST_ETHER_ADDR "08:00:27:9b:8f:70"//"bb:bb:bb:bb:bb:bb"
+//This Function opens the socket
+void raw_open(void);
 
-//Creates a RawSocket
-int CreateRawSocket();
+//This Function injects the packets
+void raw_inject(void *data, int len);
 
-//Binds the socket to the specified interface
-int BindRawSocketToInterface(char *device, int rawsock, int protocol);
+//This function is called to inject an ip packet
+int injectcp(struct iphdr* iph, struct tcphdr* tcph, void* tcpdata);
 
-//This Function Injects the TCP Packet via the Raw Socket
-int SendRawPacket(int rawsock, unsigned char *pkt, int pkt_len);
-
-//Creates the Ethernet Header
-struct ethhdr* CreateEthernetHeader(char *src_mac, char *dst_mac, int protocol);

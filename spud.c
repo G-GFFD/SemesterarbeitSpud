@@ -11,15 +11,16 @@
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
+#include "tcphandling.h"
 
 #define SERVER "10.2.115.157"
 #define TubeTimeOut 6
 
-uint8_t magic[4] = {11011000,00000000,0000000,11011000};
+uint8_t magic[4] = {0xd8,0x00,0x00,0xd8};
 
 struct spudheader* MallocSpudHeader()
 {
-	//This Function allocates space for the SPUD Header and initializes it with standart Values
+	//This Function allocates space for the SPUD Header and initializes it with standart values
 
 	struct spudheader* hdr = malloc(sizeof(struct spudheader));
 	
@@ -208,7 +209,7 @@ int SendSPUD(struct spudpacket* spud)
 
 	else
 	{
-		printf("\nSPUD sent! \n",temp);
+		printf("\nSPUD sent! \n");
 	}
 		
 	free(buf);
@@ -265,7 +266,8 @@ int HandleReceivedPacket(struct spudpacket* spud, struct sockaddr_in* receiver)
 
 		if(iph != NULL && tcph != NULL)
 		{
-			injecttcp(iph, tcph, data);
+			injectcp(iph, tcph, data);
+			//injectcp(spud->data);
 		}
 
 		else
@@ -377,7 +379,8 @@ int InitiateTubeClosure(struct listelement* this, struct iphdr *iph, struct tcph
 		
 		if(this != NULL)
 		{
-			this->tcpfinsent = 1;
+			this->tcpfinseen = 1;
+			this->finseqnr = tcph->seq;
 			SendSPUD(CreateSPUD(this->tubeid, iph, tcph, tcpdata));
 		}
 		
