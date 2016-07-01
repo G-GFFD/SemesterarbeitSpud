@@ -48,8 +48,8 @@ void raw_inject(void *data, int len)
         /*s_in.sin_addr   =  */inet_aton(DST_IP, &s_in.sin_addr); //(struct in_addr) iph->daddr;
         s_in.sin_port   = tcp->dest;
 
-	printf("Sequence Nr. of TCP about to be injected %i \n", tcp->seq);
-	printf("Ack Nr. of TCP about to be injected %i \n", tcp->ack);
+	printf("Sequence Nr. of TCP about to be injected %i \n", ntohl(tcp->seq));
+	printf("Ack Nr. of TCP about to be injected %i \n", ntohl(tcp->ack));
 
         rc = sendto(_s, data, len, 0, (struct sockaddr*) &s_in,
 		    sizeof(s_in));

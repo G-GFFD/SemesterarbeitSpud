@@ -179,8 +179,8 @@ void *tcptospud(void* argument)
 			tcph = extracttcph(message,iph);
 			data = extracttcpdata(message,iph,tcph);
 
-			printf("Sequence Nr. of TCP about to be sent %i \n", tcph->seq);
-			printf("Ack Nr. of TCP about to be sent %i \n", tcph->ack);
+			printf("Sequence Nr. of TCP about to be sent %i \n", ntohl(tcph->seq));
+			printf("Ack Nr. of TCP about to be sent %i \n", ntohl(tcph->ack));
 			
 			updatetcpchecksum(tcph,iph,data);
 			
@@ -288,7 +288,7 @@ void *status(void* argument)
 			struct listelement* temp = current; // current must always point to the last element in the list
 			int i = 0;
 
-			while(temp->previous != NULL)
+			do
 			{
 				printf("\n\n\n\n\n ----------------------------------------------------- \n \n");
 				i++;
@@ -309,9 +309,10 @@ void *status(void* argument)
 					}
 					printf(" after time-out.\n");		
 				
+					struct listelement* todelete = temp;
 					temp = temp->previous;
 
-					removetube(temp->next);
+					removetube(todelete);
 
 					i--;
 				}
@@ -335,7 +336,7 @@ void *status(void* argument)
 					temp = temp->previous;
 				}
 
-			}
+			}while(temp != NULL);
 		
 			// Display Status Infos about open Tubes
 			printf("Number of Open Tubes: %i\n", i);
