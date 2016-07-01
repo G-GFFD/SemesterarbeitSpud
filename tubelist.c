@@ -5,6 +5,8 @@
 
 void addtube(struct listelement* next)
 {
+	sem_wait(&s);
+
 	next->previous = current;
 	
 	if(current!=NULL)
@@ -16,11 +18,14 @@ void addtube(struct listelement* next)
 
 	current->tcpfinseen = 0; // initialize to 0
 	current->timeout = 6;
+
+	sem_post(&s);
 		
 }
 
 void removetube(struct listelement* old)
 {
+	sem_wait(&s);
 	
 	if(old == NULL) return;
 	
@@ -45,14 +50,21 @@ void removetube(struct listelement* old)
 	}
 
 	//Element löschen
+	close(old->fd);
+	free(old->receiver);
+	free(old->tcp);
 	free(old);
+	
+	sem_post(&s);
 }
 
 struct listelement* searchlist(uint8_t* tubeid)
 {
-
+	
 	if(current != NULL)
 	{
+		sem_wait(&s); //Semaphore so that Element temp is not unexpectedly removed by an other process
+
 		struct listelement* temp = current; // current must always point to the last element in the list
 		int i, t;
 	
@@ -73,11 +85,14 @@ struct listelement* searchlist(uint8_t* tubeid)
 			if(t==0)
 			{
 				//tubeid matches
+				sem_post(&s);
 				return temp;
 			}
 
 			temp = temp->previous;
 		}
+
+		sem_post(&s);
 	}
 	
 		return NULL; // Aussen überprüfen, falls 0 zurück dann wurde nicht gefunden
@@ -86,6 +101,8 @@ struct listelement* searchlist(uint8_t* tubeid)
 
 uint8_t* findtcptuple(struct tcptuple* tcp)
 {
+	sem_wait(&s); //Semaphore so that Element temp is not unexpectedly removed by an other process
+
 	if(current != NULL)
 	{
 		struct listelement* temp = current; // current points always to the last element
@@ -94,12 +111,15 @@ uint8_t* findtcptuple(struct tcptuple* tcp)
 		{
 			if(comparetcptuple(temp->tcp, tcp))
 			{
+				sem_post(&s);
 				return temp->tubeid;
 			}
 			temp = temp->previous;
 		}while(temp != NULL);
 	}
 	//Not Found:
+
+	sem_post(&s);
 	return NULL;
 
 }

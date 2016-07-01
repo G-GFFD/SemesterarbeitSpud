@@ -1,4 +1,4 @@
-// Userspace handling of the filtered TCP Data & Sending packet over simple SPUD without CBOR
+// Userspace handling of the filtered TCP Data & Sending packet over simple SPUD
 
 #include <sys/socket.h>
 #include <linux/netlink.h>
@@ -15,6 +15,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <semaphore.h>
 
 #include "spud.h"
 #include "tcphandling.h"
@@ -24,6 +25,7 @@
 #define SERVER "10.2.115.157"
 #define PORT 3333
 #define HELLO "hello"
+
 
 void *receivespud(void* argumnet)
 {
@@ -176,6 +178,9 @@ void *tcptospud(void* argument)
 			iph = extractiph(message);
 			tcph = extracttcph(message,iph);
 			data = extracttcpdata(message,iph,tcph);
+
+			printf("Sequence Nr. of TCP about to be sent %i \n", tcph->seq);
+			printf("Ack Nr. of TCP about to be sent %i \n", tcph->ack);
 			
 			updatetcpchecksum(tcph,iph,data);
 			
@@ -296,40 +301,18 @@ void *status(void* argument)
 					int o;
 
 					printf("Removing Tube ");
+
+
 					for(o=0; o<8; o++)
 					{
 						printf(" %i ", (int) temp->tubeid[o]);
 					}
-					printf(" after time-out.\n");
-				
-					close(temp->fd);
-
-					if(temp->receiver != NULL)
-					{
-						free(temp->receiver);
-						temp->receiver = NULL;
-					}
-
-					else
-					{
-						printf("Info: Receiver to be freed was NULL . . . \n");
-					}
-
-					if(temp->tcp != NULL)
-					{
-						free(temp->tcp);
-					}
-
-					else
-					{
-						printf("Info: TCP tuple to be freed was NULL . . . \n");
-					}
-
-					
+					printf(" after time-out.\n");		
 				
 					temp = temp->previous;
 
 					removetube(temp->next);
+
 					i--;
 				}
 
@@ -375,6 +358,8 @@ int main(int argc, char* argv[])
 	pthread_t ReceiveSPUD;
 	pthread_t SendSPUD;
 	pthread_t Status;
+
+	sem_init(&s, 0, 1);
 
 	//Check if Module Kerneltcp is loaded:
 	//int file = fopen("/proc/modules", "r");, check if kerneltcp exists

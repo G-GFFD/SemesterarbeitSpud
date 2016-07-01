@@ -1,4 +1,4 @@
-// Implementation of Simple SPUD without CBOR
+// Implementation of Simple SPUD
 #include <stdlib.h>
 #include<arpa/inet.h>
 #include<sys/socket.h>
@@ -344,9 +344,6 @@ int CloseTube(uint8_t* tubeid) //typ argument . . .
 	
 	if(this != NULL)
 	{
-		close(this->fd);
-		free(this->receiver);
-		free(this->tcp);
 		removetube(this);
 	}
 
@@ -362,9 +359,6 @@ int FinishTubeClosure(uint8_t* tubeid, struct iphdr *iph, struct tcphdr *tcph, v
 		this->status = 2; // ändern so das close spud gesendet wird
 		SendSPUD(CreateSPUD(tubeid, iph, tcph, tcpdata));
 
-		close(this->fd);
-		free(this->receiver);
-		free(this->tcp);
 		removetube(this);
 	}
 

@@ -12,7 +12,7 @@
 
 #include "injectcp.h"
 
-#define DST_IP	"10.2.112.83"
+#define DST_IP	"10.2.116.90"
 #define DST_PORT	8000
 
 
@@ -40,15 +40,16 @@ void raw_inject(void *data, int len)
         struct tcphdr *tcp = (struct tcphdr*) ((char*) iph + (iph->ihl << 2));
         struct sockaddr_in s_in;
 
+	
+
 	memset(&s_in, 0, sizeof(s_in));
 
         s_in.sin_family = PF_INET;
         /*s_in.sin_addr   =  */inet_aton(DST_IP, &s_in.sin_addr); //(struct in_addr) iph->daddr;
         s_in.sin_port   = tcp->dest;
 
-
-	printf("Filedescriptor %i\n", _s);
-	printf("Data as string: \n \n %s \n \n", data);
+	printf("Sequence Nr. of TCP about to be injected %i \n", tcp->seq);
+	printf("Ack Nr. of TCP about to be injected %i \n", tcp->ack);
 
         rc = sendto(_s, data, len, 0, (struct sockaddr*) &s_in,
 		    sizeof(s_in));

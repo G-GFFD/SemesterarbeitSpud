@@ -1,6 +1,7 @@
 // Implementation of a linked list used to manage open tube list in spud.c
 #include <stdint.h>
 #include <stddef.h>
+#include <semaphore.h>
 
 struct listelement
 {
@@ -31,6 +32,7 @@ struct tcptuple
 }tcptuple;
 
 struct listelement* current;
+sem_t s;
 
 //This Function adds a new Element to the List
 void addtube(struct listelement* next);
