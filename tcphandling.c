@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include "tcphandling.h"
 
+
 struct iphdr* extractiph(void* buffer)
 {
 		/*struct iphdr* iph = malloc ( (((struct iphdr*)iph)->ihl)*4 );
@@ -26,31 +27,31 @@ struct iphdr* extractiph(void* buffer)
 
 }
 
-struct tcphdr* extracttcph(void* buffer, struct iphdr* iph)
+struct tcphdr* extracttcph(void* buffer)
 {
 	struct tcphdr* tcph = malloc(sizeof(struct tcphdr));
-	memcpy(tcph, buffer+(iph->ihl)*4, sizeof(struct tcphdr));
+	memcpy(tcph, buffer, sizeof(struct tcphdr));
 
 	if(tcph->doff > 5)
 	{
 		//There are TCP Options, allocate more space and copy them behind
 		tcph = realloc(tcph,(tcph->doff) * 4);
-		memcpy(tcph,buffer+(iph->ihl)*4,(tcph->doff)*4);
+		memcpy(tcph,buffer,(tcph->doff)*4);
 	}
 	
 	return tcph;
 
 }
 
-char* extracttcpdata(void* buffer, struct iphdr* iph, struct tcphdr* tcph)
+char* extracttcpdata(void* buffer, int tcpdatalength, struct tcphdr* tcph)
 {
 	//Finally extract TCP Data		
-	int tcpdatalenght = (int)(ntohs(iph->tot_len))-((int)(tcph->doff)+((int)iph->ihl))*4;
+	//int tcpdatalenght = (int)(ntohs(iph->tot_len))-((int)(tcph->doff)+((int)iph->ihl))*4;
 		
-	if(tcpdatalenght >0)
+	if(tcpdatalength >0)
 	{
-		char* data = malloc(tcpdatalenght);
-		memcpy(data, buffer+(iph->ihl)*4+(tcph->doff)*4, tcpdatalenght);
+		char* data = malloc(tcpdatalength);
+		memcpy(data, buffer+(tcph->doff)*4, tcpdatalength);
 		return data;
 	}
 	

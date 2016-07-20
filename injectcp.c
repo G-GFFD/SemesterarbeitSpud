@@ -1,3 +1,5 @@
+//Information: Inject Sourcecode based on Implementation of TCPCrypt
+
 #include<stdio.h>
 #include<stdlib.h>
 #include<sys/socket.h>
@@ -12,11 +14,14 @@
 
 #include "injectcp.h"
 
-#define DST_IP	"10.2.116.90"
+#define DSTIP	"10.2.116.136" //local adresse as they'll be injected on this machine
 #define DST_PORT	8000
+
+#define SRCIP "10.2.118.85"  //take UDP source instead of hardcoded address
 
 
 static int _s;
+struct iphdr* iph;
 
 void raw_open()
 {       
@@ -31,6 +36,26 @@ void raw_open()
                 err(1, "IP_HDRINCL");
 
 	printf("Socket is now open");
+
+	//setup iphdr used to inject tcp packet locally
+
+	iph = malloc(sizeof(struct iphdr));
+
+	iph->version = 4;
+	iph->tos=0;
+	iph->ihl=(sizeof(struct iphdr))/4;
+	iph->id = htons(111);
+	iph->frag_off = 0;
+	iph->ttl = 111;
+	iph->protocol = IPPROTO_TCP;
+	
+	iph->saddr = inet_addr(SRCIP);
+	iph->daddr = inet_addr(DSTIP);
+
+	//to be adjusted individually for every injected packet
+	iph->tot_len = 0;
+	iph->check = 0;
+
 }
 
 void raw_inject(void *data, int len)
@@ -45,11 +70,8 @@ void raw_inject(void *data, int len)
 	memset(&s_in, 0, sizeof(s_in));
 
         s_in.sin_family = PF_INET;
-        /*s_in.sin_addr   =  */inet_aton(DST_IP, &s_in.sin_addr); //(struct in_addr) iph->daddr;
+        /*s_in.sin_addr   =  */inet_aton(DSTIP, &s_in.sin_addr); //(struct in_addr) iph->daddr;
         s_in.sin_port   = tcp->dest;
-
-	printf("Sequence Nr. of TCP about to be injected %i \n", ntohl(tcp->seq));
-	printf("Ack Nr. of TCP about to be injected %i \n", ntohl(tcp->ack));
 
         rc = sendto(_s, data, len, 0, (struct sockaddr*) &s_in,
 		    sizeof(s_in));
@@ -63,16 +85,20 @@ void raw_inject(void *data, int len)
 	printf("sucessful injection, wrote %i bytes\n", rc);
 }
  
-injectcp(struct iphdr* iph, struct tcphdr* tcph, void* tcpdata)
+injectcp(struct tcphdr* tcph, void* tcpdata, int pkt_len)
 {
-
-	//unsigned char *packet;
-	int pkt_len;
 
 	//schauen das nur 1x aufgemacht wird
 	raw_open();
 
-	pkt_len = ntohs(iph->tot_len);
+	//use this, in order to set the source address of the ip packet to the source of the received struct sockaddr_in iph->saddr = inet_addr(inet_ntoa(((struct sockaddr_in *)&if_ip.ifr_addr)->sin_addr)); for now, set to fixed address
+
+	//adjust iphdr, compute checksum
+	pkt_len = pkt_len + sizeof(struct iphdr);
+
+	iph->tot_len = htons(pkt_len);
+	iph->check = updateipchecksum(iph);
+
 	void* packet = (unsigned char *)malloc(pkt_len);
 	int data_len = ntohs(iph->tot_len)-(iph->ihl+tcph->doff)*4;
 

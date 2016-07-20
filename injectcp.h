@@ -7,5 +7,5 @@ void raw_open(void);
 void raw_inject(void *data, int len);
 
 //This function is called to inject an ip packet
-int injectcp(struct iphdr* iph, struct tcphdr* tcph, void* tcpdata);
+int injectcp(struct tcphdr* tcph, void* tcpdata, int pkt_len);
 

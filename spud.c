@@ -13,7 +13,7 @@
 #include <string.h>
 #include "tcphandling.h"
 
-#define SERVER "10.2.115.157"
+#define SERVER "10.2.118.85"
 #define TubeTimeOut 6
 
 uint8_t magic[4] = {0xd8,0x00,0x00,0xd8};
@@ -131,10 +131,10 @@ struct spudpacket* CreateSPUD(uint8_t* tubeid, struct iphdr *iph, struct tcphdr 
 	int iphdrlen = ((int)(iph->ihl)*4); // sizeof(struct iphdr) doesn't contain the options appended at the end
 	int tcphdrlen = ((int)(tcph->doff)*4);
 		
-	spud->datalenght = tcpdatalenght + iphdrlen + tcphdrlen;
+	spud->datalenght = tcpdatalenght +  tcphdrlen;
 
 	//check . . .
-	if(ntohs(iph->tot_len) != spud->datalenght)
+	if(ntohs(iph->tot_len) != spud->datalenght + iphdrlen)
 	{
 		//This would indicate some data have gone missing.
 		printf("ntohs(iph->tot_len) != spud->datalenght in spud.c ln 143\n");	
@@ -145,14 +145,11 @@ struct spudpacket* CreateSPUD(uint8_t* tubeid, struct iphdr *iph, struct tcphdr 
 	{
 		spud->data = malloc(spud->datalenght);
 
-		//first memcpy iphdr
-		memcpy(spud->data, iph,iphdrlen);
-
 		//second memcpy tcphdr
-		memcpy(spud->data+iphdrlen, tcph, tcphdrlen);
+		memcpy(spud->data, tcph, tcphdrlen);
 
 		//finally memcpy tcpdata
-		memcpy(spud->data+iphdrlen+tcphdrlen, tcpdata, tcpdatalenght);
+		memcpy(spud->data+tcphdrlen, tcpdata, tcpdatalenght);
 	}
 
 	else
@@ -254,19 +251,22 @@ int HandleReceivedPacket(struct spudpacket* spud, struct sockaddr_in* receiver)
 
 		}
 		
-		struct iphdr *iph = NULL;
+		//struct iphdr *iph = NULL;
 		struct tcphdr *tcph = NULL;
 		char *data = NULL;
 
-		iph = extractiph(spud->data);
-		tcph = extracttcph(spud->data,iph);
-		data = extracttcpdata(spud->data,iph,tcph);
+		//iph = extractiph(spud->data);
+		tcph = extracttcph(spud->data);
+		data = extracttcpdata(spud->data, spud->datalenght, tcph);
 
-		updatetcpchecksum(tcph,iph,data);
+		int lenght = spud->datalenght + tcph->doff*4;
 
-		if(iph != NULL && tcph != NULL)
+		//updatetcpchecksum(tcph,iph,data);
+
+		if(/*iph != NULL &&*/ tcph != NULL)
 		{
-			injectcp(iph, tcph, data);
+			
+			injectcp(tcph, data, lenght);
 			//injectcp(spud->data);
 		}
 
